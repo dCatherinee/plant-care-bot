@@ -1,10 +1,12 @@
-test:
-	go test ./..
+.PHONY: test lint fmt vet
 
-lint: fmt vet
+test:
+	go test ./...
 
 fmt:
-	go fmt ./..
+	go fmt ./...
 
 vet:
-	go vet ./..
+	go vet ./...
+
+lint: fmt vet
