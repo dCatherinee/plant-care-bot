@@ -7,48 +7,45 @@ import (
 	"time"
 )
 
-func TestPlant_EmptyUserID(t *testing.T) {
-	_, err := NewPlant(0, "cactus")
-
-	if !errors.Is(err, ErrInvalidArgument) {
-		t.Error("UserID can't be empty or negative number")
-	}
-}
-
-func TestPlant_EmptyName(t *testing.T) {
-	_, err := NewPlant(10, "")
-
-	if !errors.Is(err, ErrInvalidArgument) {
-		t.Error("Plant name can't be empty")
-	}
-}
-
-func TestPlant_TrimName(t *testing.T) {
-	plantName := " Cactus Poppy  "
-
-	plant, err := NewPlant(10, plantName)
-
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
+func TestNewPlant(t *testing.T) {
+	tests := []struct {
+		name      string
+		userID    int64
+		plantName string
+		wantErr   bool
+	}{
+		{"ok", 1, "Monstera", false},
+		{"empty_user_id", 0, "Cactus", true},
+		{"empty_name", 10, "", true},
+		{"trim_name", 10, " Cactus Poppy  ", false},
 	}
 
-	if plant.Name != strings.TrimSpace(plantName) {
-		t.Error("Plant name don't trim")
-	}
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			plant, err := NewPlant(tc.userID, tc.plantName)
 
-func TestPlant_InvalidCreateDate(t *testing.T) {
-	plant, err := NewPlant(10, "cactus")
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("Expected error, got nil")
+				}
+				if !errors.Is(err, ErrInvalidArgument) {
+					t.Fatalf("Expected ErrInvalidArgument, got %v", err)
+				}
+				return
+			}
 
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	if plant.CreatedAt.IsZero() {
-		t.Error("Plant created date can't be empty")
-	}
-
-	if plant.CreatedAt.Location() != time.UTC {
-		t.Fatalf("CreatedAt must be UTC, got %v", plant.CreatedAt.Location())
+			if err != nil {
+				t.Fatalf("Expected no error, got %v", err)
+			}
+			if strings.TrimSpace(tc.plantName) != plant.Name {
+				t.Fatalf("expected trimmed name %q, got %q", strings.TrimSpace(tc.plantName), plant.Name)
+			}
+			if plant.CreatedAt.Location() != time.UTC {
+				t.Fatalf("CreatedAt must be UTC, got %v", plant.CreatedAt.Location())
+			}
+			if plant.CreatedAt.IsZero() {
+				t.Fatal("CreatedAt must not be zero")
+			}
+		})
 	}
 }
