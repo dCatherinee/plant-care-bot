@@ -9,15 +9,17 @@ import (
 
 func TestNewPlant(t *testing.T) {
 	tests := []struct {
-		name      string
-		userID    int64
-		plantName string
-		wantErr   bool
+		name        string
+		userID      int64
+		plantName   string
+		wantErr     bool
+		wantField   string
+		wantProblem string
 	}{
-		{"ok", 1, "Monstera", false},
-		{"empty_user_id", 0, "Cactus", true},
-		{"empty_name", 10, "", true},
-		{"trim_name", 10, " Cactus Poppy  ", false},
+		{"ok", 1, "Monstera", false, "", ""},
+		{"empty_user_id", 0, "Cactus", true, "userID", "must be positive"},
+		{"empty_name", 10, "", true, "name", "is empty"},
+		{"trim_name", 10, " Cactus Poppy  ", false, "", ""},
 	}
 
 	for _, tc := range tests {
@@ -30,11 +32,16 @@ func TestNewPlant(t *testing.T) {
 				}
 
 				var myErr ValidationError
-				if errors.As(err, &myErr) {
-					if myErr.Field == "name" {
-						t.Fatalf("Expected error on field: %q: %q", myErr.Field, myErr.Problem)
-					}
+				if !errors.As(err, &myErr) {
+					t.Fatalf("Expected ValidationError, got %T: %v", err, err)
 				}
+				if myErr.Field != tc.wantField {
+					t.Fatalf("Expected field %q, got %q", tc.wantField, myErr.Field)
+				}
+				if myErr.Problem != tc.wantProblem {
+					t.Fatalf("Expected problem %q, got %q", tc.wantProblem, myErr.Problem)
+				}
+
 				if !errors.Is(err, ErrInvalidArgument) {
 					t.Fatalf("Expected ErrInvalidArgument, got %v", err)
 				}
