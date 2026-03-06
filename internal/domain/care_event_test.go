@@ -13,21 +13,21 @@ func TestCareEvent(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		plantId    int64
+		plantID    int64
 		kind       CareKind
 		occurredAt time.Time
 		wantErr    bool
 	}{
 		{"ok", 10, CareKindWater, fixed, false},
 		{"empty_plant_id", 0, CareKindWater, fixed, true},
-		{"invalid_kind", 10, "freeze", fixed, true},
+		{"invalid_kind", 10, CareKind("freeze"), fixed, true},
 		{"invalid_location", 10, CareKindFertilize, in, false},
 		{"zero_time", 10, CareKindWater, time.Time{}, true},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			event, err := NewCareEvent(tc.plantId, tc.kind, tc.occurredAt)
+			event, err := NewCareEvent(tc.plantID, tc.kind, tc.occurredAt)
 
 			if tc.wantErr {
 				if err == nil {
