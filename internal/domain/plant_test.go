@@ -28,6 +28,13 @@ func TestNewPlant(t *testing.T) {
 				if err == nil {
 					t.Fatal("Expected error, got nil")
 				}
+
+				var myErr ValidationError
+				if errors.As(err, &myErr) {
+					if myErr.Field == "name" {
+						t.Fatalf("Expected error on field: %q: %q", myErr.Field, myErr.Problem)
+					}
+				}
 				if !errors.Is(err, ErrInvalidArgument) {
 					t.Fatalf("Expected ErrInvalidArgument, got %v", err)
 				}
@@ -38,7 +45,7 @@ func TestNewPlant(t *testing.T) {
 				t.Fatalf("Expected no error, got %v", err)
 			}
 			if strings.TrimSpace(tc.plantName) != plant.Name {
-				t.Fatalf("expected trimmed name %q, got %q", strings.TrimSpace(tc.plantName), plant.Name)
+				t.Fatalf("Expected trimmed name %q, got %q", strings.TrimSpace(tc.plantName), plant.Name)
 			}
 			if plant.CreatedAt.Location() != time.UTC {
 				t.Fatalf("CreatedAt must be UTC, got %v", plant.CreatedAt.Location())

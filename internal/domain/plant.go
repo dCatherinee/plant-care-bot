@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"fmt"
 	"strings"
 	"time"
 )
@@ -17,10 +16,10 @@ type Plant struct {
 func NewPlant(userID int64, name string) (Plant, error) {
 	name = strings.TrimSpace(name)
 	if userID <= 0 {
-		return Plant{}, fmt.Errorf("%w: userID must be positive", ErrInvalidArgument)
+		return Plant{}, ValidationError{Field: "userID", Problem: "must be positive"}
 	}
 	if name == "" {
-		return Plant{}, fmt.Errorf("%w: name is empty", ErrInvalidArgument)
+		return Plant{}, ValidationError{Field: "name", Problem: "is empty"}
 	}
 
 	return Plant{

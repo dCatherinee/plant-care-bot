@@ -33,6 +33,13 @@ func TestCareEvent(t *testing.T) {
 				if err == nil {
 					t.Fatal("Expected error, got nil")
 				}
+
+				var myErr ValidationError
+				if errors.As(err, &myErr) {
+					if myErr.Field == "occurredAt" {
+						t.Fatalf("Expected error on field: %q: %q", myErr.Field, myErr.Problem)
+					}
+				}
 				if !errors.Is(err, ErrInvalidArgument) {
 					t.Fatalf("Expected ErrInvalidArgument, got %v", err)
 				}

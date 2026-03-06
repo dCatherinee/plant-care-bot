@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -31,13 +30,13 @@ type CareEvent struct {
 
 func NewCareEvent(plantID int64, kind CareKind, occurredAt time.Time) (CareEvent, error) {
 	if plantID <= 0 {
-		return CareEvent{}, fmt.Errorf("%w: plantID must be positive", ErrInvalidArgument)
+		return CareEvent{}, ValidationError{Field: "plantID", Problem: "must be positive"}
 	}
 	if !kind.Valid() {
-		return CareEvent{}, fmt.Errorf("%w: invalid care kind %q", ErrInvalidArgument, kind)
+		return CareEvent{}, ValidationError{Field: "kind", Problem: "invalid care kind"}
 	}
 	if occurredAt.IsZero() {
-		return CareEvent{}, fmt.Errorf("%w: occurredAt is zero", ErrInvalidArgument)
+		return CareEvent{}, ValidationError{Field: "occurredAt", Problem: "is zero"}
 	}
 
 	return CareEvent{
