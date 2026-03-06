@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestCareEvent(t *testing.T) {
+func TestNewCareEvent(t *testing.T) {
 	loc := time.FixedZone("MSK", 3*60*60)         // UTC+3
 	in := time.Date(2026, 3, 4, 12, 0, 0, 0, loc) // 12:00 MSK
 	fixed := time.Date(2026, 3, 4, 9, 0, 0, 0, time.UTC)
