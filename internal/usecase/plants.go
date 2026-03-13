@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/dCatherinee/plant-care-bot/internal/domain"
 )
@@ -31,14 +32,19 @@ func (s *PlantService) AddPlant(ctx context.Context, userID int64, name string) 
 		return domain.Plant{}, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	select {
+	case <-time.After(50 * time.Millisecond):
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
-	s.nextID++
-	plant.ID = s.nextID
-	s.plantsByUser[userID] = append(s.plantsByUser[userID], plant)
+		s.nextID++
+		plant.ID = s.nextID
+		s.plantsByUser[userID] = append(s.plantsByUser[userID], plant)
 
-	return plant, nil
+		return plant, nil
+	case <-ctx.Done():
+		return domain.Plant{}, ctx.Err()
+	}
 }
 
 func (s *PlantService) ListPlants(ctx context.Context, userID int64) ([]domain.Plant, error) {

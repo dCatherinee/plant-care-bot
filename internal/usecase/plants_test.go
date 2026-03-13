@@ -4,10 +4,32 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/dCatherinee/plant-care-bot/internal/domain"
 )
+
+func mustNoErr(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func newService() *PlantService {
+	return NewPlantService()
+}
+
+func addPlant(t *testing.T, svc *PlantService, ctx context.Context, userID int64, name string) domain.Plant {
+	t.Helper()
+	plant, err := svc.AddPlant(ctx, userID, name)
+
+	mustNoErr(t, err)
+
+	return plant
+}
 
 func TestPlantServiceAddPlant(t *testing.T) {
 	tests := []struct {
@@ -27,39 +49,37 @@ func TestPlantServiceAddPlant(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			plantService := NewPlantService()
+			svc := newService()
 
-			plant, err := plantService.AddPlant(ctx, tc.userID, tc.plantName)
+			plant, err := svc.AddPlant(ctx, tc.userID, tc.plantName)
 
 			if tc.wantErr {
 				if err == nil {
-					t.Fatal("Expected error, got nil")
+					t.Fatal("expected error, got nil")
 				}
 
 				var myErr domain.ValidationError
 				if !errors.As(err, &myErr) {
-					t.Fatalf("Expected ValidationError, got %T: %v", err, err)
+					t.Fatalf("expected ValidationError, got %T: %v", err, err)
 				}
 				if myErr.Field != tc.wantField {
-					t.Fatalf("Expected field %q, got %q", tc.wantField, myErr.Field)
+					t.Fatalf("expected field %q, got %q", tc.wantField, myErr.Field)
 				}
 				if myErr.Problem != tc.wantProblem {
-					t.Fatalf("Expected problem %q, got %q", tc.wantProblem, myErr.Problem)
+					t.Fatalf("expected problem %q, got %q", tc.wantProblem, myErr.Problem)
 				}
 				if !errors.Is(err, domain.ErrInvalidArgument) {
-					t.Fatalf("Expected ErrInvalidArgument, got %v", err)
+					t.Fatalf("expected ErrInvalidArgument, got %v", err)
 				}
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("Expected no error, got %v", err)
-			}
+			mustNoErr(t, err)
 			if strings.TrimSpace(tc.plantName) != plant.Name {
-				t.Fatalf("Expected trimmed name %q, got %q", strings.TrimSpace(tc.plantName), plant.Name)
+				t.Fatalf("expected trimmed name %q, got %q", strings.TrimSpace(tc.plantName), plant.Name)
 			}
 			if plant.ID != 1 {
-				t.Fatalf("Expected plantID %v, got %v", 1, plant.ID)
+				t.Fatalf("expected plantID %v, got %v", 1, plant.ID)
 			}
 		})
 	}
@@ -67,137 +87,181 @@ func TestPlantServiceAddPlant(t *testing.T) {
 
 func TestPlantServiceAddPlantIDIncreases(t *testing.T) {
 	ctx := context.Background()
-	plantService := NewPlantService()
+	svc := newService()
 
-	firstPlant, err := plantService.AddPlant(ctx, 10, "Monstera")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	secondPlant, err := plantService.AddPlant(ctx, 10, "Cactus")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	firstPlant := addPlant(t, svc, ctx, 10, "Monstera")
+	secondPlant := addPlant(t, svc, ctx, 10, "Cactus")
 
 	if firstPlant.ID != 1 {
-		t.Fatalf("Expected first plantID %v, got %v", 1, firstPlant.ID)
+		t.Fatalf("expected first plantID %v, got %v", 1, firstPlant.ID)
 	}
 	if secondPlant.ID != 2 {
-		t.Fatalf("Expected second plantID %v, got %v", 2, secondPlant.ID)
+		t.Fatalf("expected second plantID %v, got %v", 2, secondPlant.ID)
 	}
 	if secondPlant.ID <= firstPlant.ID {
-		t.Fatalf("Expected second plantID to be greater than first: first=%v second=%v", firstPlant.ID, secondPlant.ID)
+		t.Fatalf("expected second plantID to be greater than first: first=%v second=%v", firstPlant.ID, secondPlant.ID)
 	}
 }
 
 func TestPlantServiceListPlants(t *testing.T) {
 	ctx := context.Background()
-	plantService := NewPlantService()
+	svc := newService()
 
-	plant, err := plantService.AddPlant(ctx, 10, "Monstera")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	plant := addPlant(t, svc, ctx, 10, "Monstera")
 
-	list, err := plantService.ListPlants(ctx, 10)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	list, err := svc.ListPlants(ctx, 10)
+	mustNoErr(t, err)
 
 	if len(list) != 1 {
-		t.Fatalf("Expected list length %v, got %v", 1, len(list))
+		t.Fatalf("expected list length %v, got %v", 1, len(list))
 	}
 	if list[0].ID != plant.ID {
-		t.Fatalf("Expected plantID %v, got %v", plant.ID, list[0].ID)
+		t.Fatalf("expected plantID %v, got %v", plant.ID, list[0].ID)
 	}
 	if list[0].Name != plant.Name {
-		t.Fatalf("Expected plant name %q, got %q", plant.Name, list[0].Name)
+		t.Fatalf("expected plant name %q, got %q", plant.Name, list[0].Name)
 	}
 }
 
 func TestPlantServiceListPlantsReturnsCopy(t *testing.T) {
 	ctx := context.Background()
-	plantService := NewPlantService()
+	svc := newService()
 
-	_, err := plantService.AddPlant(ctx, 10, "Monstera")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	addPlant(t, svc, ctx, 10, "Monstera")
 
-	list, err := plantService.ListPlants(ctx, 10)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	list, err := svc.ListPlants(ctx, 10)
+	mustNoErr(t, err)
 
 	list[0].Name = "Changed"
 
-	freshList, err := plantService.ListPlants(ctx, 10)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	freshList, err := svc.ListPlants(ctx, 10)
+	mustNoErr(t, err)
 
 	if freshList[0].Name != "Monstera" {
-		t.Fatalf("Expected original plant name %q, got %q", "Monstera", freshList[0].Name)
+		t.Fatalf("expected original plant name %q, got %q", "Monstera", freshList[0].Name)
 	}
 }
 
 func TestPlantServiceListPlantsOtherUserEmpty(t *testing.T) {
 	ctx := context.Background()
-	plantService := NewPlantService()
+	svc := newService()
 
-	_, err := plantService.AddPlant(ctx, 10, "Monstera")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	addPlant(t, svc, ctx, 10, "Monstera")
 
-	list, err := plantService.ListPlants(ctx, 20)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	list, err := svc.ListPlants(ctx, 20)
+	mustNoErr(t, err)
 
 	if len(list) != 0 {
-		t.Fatalf("Expected empty list for another user, got %v items", len(list))
+		t.Fatalf("expected empty list for another user, got %v items", len(list))
 	}
 }
 
 func TestPlantServiceDeletePlant(t *testing.T) {
 	ctx := context.Background()
-	plantService := NewPlantService()
+	svc := newService()
 
-	plant, err := plantService.AddPlant(ctx, 10, "Cactus")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	plant := addPlant(t, svc, ctx, 10, "Cactus")
 
-	err = plantService.DeletePlant(ctx, 10, plant.ID)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	err := svc.DeletePlant(ctx, 10, plant.ID)
+	mustNoErr(t, err)
 
-	list, err := plantService.ListPlants(ctx, 10)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	list, err := svc.ListPlants(ctx, 10)
+	mustNoErr(t, err)
 
 	if len(list) != 0 {
-		t.Fatalf("Expected empty list after delete, got %v items", len(list))
+		t.Fatalf("expected empty list after delete, got %v items", len(list))
 	}
 }
 
 func TestPlantServiceDeletePlantOtherUserReturnsNotFound(t *testing.T) {
 	ctx := context.Background()
-	plantService := NewPlantService()
+	svc := newService()
 
-	plant, err := plantService.AddPlant(ctx, 10, "Cactus")
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
+	plant := addPlant(t, svc, ctx, 10, "Cactus")
 
-	err = plantService.DeletePlant(ctx, 20, plant.ID)
+	err := svc.DeletePlant(ctx, 20, plant.ID)
+
 	if err == nil {
-		t.Fatal("Expected error, got nil")
+		t.Fatal("expected error, got nil")
 	}
 	if !errors.Is(err, domain.ErrNotFound) {
-		t.Fatalf("Expected ErrNotFound, got %v", err)
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestPlantServiceCancelContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	svc := newService()
+
+	_, err := svc.AddPlant(ctx, 10, "Cactus")
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+func TestPlantServiceConcurrentAddPlant(t *testing.T) {
+	svc := newService()
+	ctx := context.Background()
+	const N = 100
+	start := make(chan struct{})
+	errCh := make(chan error, N)
+	var wg sync.WaitGroup
+
+	wg.Add(N)
+	for i := 1; i <= N; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+
+			_, err := svc.AddPlant(ctx, 10, "Monstera")
+
+			if err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Fatalf("AddPlant returned error: %v", err)
+	}
+
+	list, err := svc.ListPlants(ctx, 10)
+	mustNoErr(t, err)
+
+	if len(list) != N {
+		t.Fatalf("expected %d plants, got %d", N, len(list))
+	}
+
+	seen := map[int64]struct{}{}
+
+	for _, plant := range list {
+		if _, ok := seen[plant.ID]; ok {
+			t.Fatalf("duplicate plant ID: %d", plant.ID)
+		}
+		seen[plant.ID] = struct{}{}
+	}
+}
+
+func TestPlantServiceDeadlineExceeded(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	svc := newService()
+
+	_, err := svc.AddPlant(ctx, 10, "Cactus")
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
 	}
 }
