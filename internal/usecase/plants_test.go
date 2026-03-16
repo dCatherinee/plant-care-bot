@@ -265,3 +265,154 @@ func TestPlantServiceDeadlineExceeded(t *testing.T) {
 		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
 	}
 }
+
+func TestPlantServiceGetPlantOk(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	plant := addPlant(t, svc, ctx, 10, "Cactus")
+	getPlant, err := svc.GetPlant(ctx, 10, plant.ID)
+	mustNoErr(t, err)
+
+	if getPlant.ID != plant.ID || getPlant.Name != plant.Name {
+		t.Fatalf("expected plant with ID %d, got ID %d", plant.ID, getPlant.ID)
+	}
+}
+
+func TestPlantServiceGetPlantNotFound(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	addPlant(t, svc, ctx, 10, "Cactus")
+	_, err := svc.GetPlant(ctx, 10, 3)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestPlantServiceGetPlantWrongUserID(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	plant := addPlant(t, svc, ctx, 10, "Cactus")
+	_, err := svc.GetPlant(ctx, 5, plant.ID)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestPlantServiceUpdatePlantName(t *testing.T) {
+	tests := []struct {
+		name      string
+		userID    int64
+		plantID   int64
+		plantName string
+		wantName  string
+		wantErr   error
+		wantField string
+		wantProb  string
+	}{
+		{
+			name:      "update_plant_name_ok",
+			userID:    10,
+			plantID:   1,
+			plantName: "Cactus",
+			wantName:  "Cactus",
+		},
+		{
+			name:      "plant_not_found",
+			userID:    10,
+			plantID:   3,
+			plantName: "Cactus",
+			wantErr:   domain.ErrNotFound,
+		},
+		{
+			name:      "wrong_user",
+			userID:    17,
+			plantID:   1,
+			plantName: "Cactus",
+			wantErr:   domain.ErrNotFound,
+		},
+		{
+			name:      "empty_name",
+			userID:    10,
+			plantID:   1,
+			plantName: "",
+			wantErr:   domain.ErrInvalidArgument,
+			wantField: "name",
+			wantProb:  "is empty",
+		},
+		{
+			name:      "trim_name",
+			userID:    10,
+			plantID:   1,
+			plantName: "  Cactus ",
+			wantName:  "Cactus",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			svc := newService()
+
+			plant, err := svc.AddPlant(ctx, 10, "Monstera")
+			mustNoErr(t, err)
+
+			plant, err = svc.UpdatePlantName(ctx, tc.userID, tc.plantID, tc.plantName)
+
+			if tc.wantErr != nil {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !errors.Is(err, tc.wantErr) {
+					t.Fatalf("expected %v, got %v", tc.wantErr, err)
+				}
+				if tc.wantField != "" {
+					var validationErr domain.ValidationError
+					if !errors.As(err, &validationErr) {
+						t.Fatalf("expected ValidationError, got %T: %v", err, err)
+					}
+					if validationErr.Field != tc.wantField {
+						t.Fatalf("expected field %q, got %q", tc.wantField, validationErr.Field)
+					}
+					if validationErr.Problem != tc.wantProb {
+						t.Fatalf("expected problem %q, got %q", tc.wantProb, validationErr.Problem)
+					}
+				}
+				return
+			}
+
+			mustNoErr(t, err)
+			if tc.wantName != plant.Name {
+				t.Fatalf("expected new name %q, got %q", tc.wantName, plant.Name)
+			}
+		})
+	}
+}
+
+func TestPlantServiceUpdatePlantNameCanceledContext(t *testing.T) {
+	ctx := context.Background()
+	svc := newService()
+
+	plant := addPlant(t, svc, ctx, 10, "Monstera")
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := svc.UpdatePlantName(canceledCtx, 10, plant.ID, "Cactus")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}

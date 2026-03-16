@@ -33,28 +33,28 @@ func TestNewCareEvent(t *testing.T) {
 
 			if tc.wantErr {
 				if err == nil {
-					t.Fatal("Expected error, got nil")
+					t.Fatal("expected error, got nil")
 				}
 
 				var myErr ValidationError
 				if !errors.As(err, &myErr) {
-					t.Fatalf("Expected ValidationError, got %T: %v", err, err)
+					t.Fatalf("expected ValidationError, got %T: %v", err, err)
 				}
 				if myErr.Field != tc.wantField {
-					t.Fatalf("Expected field %q, got %q", tc.wantField, myErr.Field)
+					t.Fatalf("expected field %q, got %q", tc.wantField, myErr.Field)
 				}
 				if myErr.Problem != tc.wantProblem {
-					t.Fatalf("Expected problem %q, got %q", tc.wantProblem, myErr.Problem)
+					t.Fatalf("expected problem %q, got %q", tc.wantProblem, myErr.Problem)
 				}
 
 				if !errors.Is(err, ErrInvalidArgument) {
-					t.Fatalf("Expected ErrInvalidArgument, got %v", err)
+					t.Fatalf("expected ErrInvalidArgument, got %v", err)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("Expected no error, got %v", err)
+				t.Fatalf("expected no error, got %v", err)
 			}
 			if event.OccurredAt.Location() != time.UTC {
 				t.Fatalf("OccurredAt must be UTC, got %v", event.OccurredAt.Location())

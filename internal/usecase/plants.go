@@ -84,3 +84,47 @@ func (s *PlantService) DeletePlant(ctx context.Context, userID int64, plantID in
 
 	return domain.ErrNotFound
 }
+
+func (s *PlantService) GetPlant(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Plant{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	userPlants := s.plantsByUser[userID]
+
+	for _, plant := range userPlants {
+		if plantID == plant.ID {
+			return plant, nil
+		}
+	}
+
+	return domain.Plant{}, domain.ErrNotFound
+}
+
+func (s *PlantService) UpdatePlantName(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Plant{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	userPlants := s.plantsByUser[userID]
+
+	for i := range userPlants {
+		if plantID != userPlants[i].ID {
+			continue
+		}
+
+		if err := userPlants[i].Rename(name); err != nil {
+			return domain.Plant{}, err
+		}
+
+		return userPlants[i], nil
+	}
+
+	return domain.Plant{}, domain.ErrNotFound
+}
