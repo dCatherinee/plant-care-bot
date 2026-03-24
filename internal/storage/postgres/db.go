@@ -15,7 +15,7 @@ const pingTimeout = 5 * time.Second
 
 func open(cfg config.Config) (*sql.DB, error) {
 	dsn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s",
+		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		cfg.DBUser,
 		cfg.DBPassword,
 		cfg.DBHost,
