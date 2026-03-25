@@ -38,3 +38,7 @@ migrate-up:
 
 migrate-down:
 	$(GOOSE) -dir $(MIGRATIONS_DIR) postgres "$(DB_URL)" down
+
+test-integration:
+	set -a; source .env; set +a; go test -tags=integration ./internal/storage/postgres -v
+
