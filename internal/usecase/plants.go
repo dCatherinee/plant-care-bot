@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"time"
 
 	"github.com/dCatherinee/plant-care-bot/internal/domain"
 	"github.com/dCatherinee/plant-care-bot/internal/repo"
@@ -27,21 +26,15 @@ func (s *PlantService) AddPlant(ctx context.Context, userID int64, name string) 
 		return domain.Plant{}, err
 	}
 
-	select {
-	case <-time.After(50 * time.Millisecond):
+	plantID, err := s.repo.CreatePlant(ctx, plant)
 
-		plantID, err := s.repo.CreatePlant(ctx, plant)
-
-		if err != nil {
-			return domain.Plant{}, err
-		}
-
-		plant.ID = plantID
-
-		return plant, nil
-	case <-ctx.Done():
-		return domain.Plant{}, ctx.Err()
+	if err != nil {
+		return domain.Plant{}, err
 	}
+
+	plant.ID = plantID
+
+	return plant, nil
 }
 
 func (s *PlantService) ListPlants(ctx context.Context, userID int64) ([]domain.Plant, error) {
