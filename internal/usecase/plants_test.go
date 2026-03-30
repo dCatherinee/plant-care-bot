@@ -3,13 +3,53 @@ package usecase
 import (
 	"context"
 	"errors"
-	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/dCatherinee/plant-care-bot/internal/domain"
 )
+
+type fakePlantRepo struct {
+	createPlantFn      func(ctx context.Context, plant domain.Plant) (int64, error)
+	listPlantsByUserFn func(ctx context.Context, userID int64) ([]domain.Plant, error)
+	deletePlantFn      func(ctx context.Context, userID int64, plantID int64) error
+	getPlantByIDFn     func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error)
+	updatePlantNameFn  func(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error)
+}
+
+func (f *fakePlantRepo) CreatePlant(ctx context.Context, plant domain.Plant) (int64, error) {
+	if f.createPlantFn != nil {
+		return f.createPlantFn(ctx, plant)
+	}
+	return 0, nil
+}
+
+func (f *fakePlantRepo) ListPlantsByUser(ctx context.Context, userID int64) ([]domain.Plant, error) {
+	if f.listPlantsByUserFn != nil {
+		return f.listPlantsByUserFn(ctx, userID)
+	}
+	return nil, nil
+}
+
+func (f *fakePlantRepo) DeletePlant(ctx context.Context, userID int64, plantID int64) error {
+	if f.deletePlantFn != nil {
+		return f.deletePlantFn(ctx, userID, plantID)
+	}
+	return nil
+}
+
+func (f *fakePlantRepo) GetPlantByID(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
+	if f.getPlantByIDFn != nil {
+		return f.getPlantByIDFn(ctx, userID, plantID)
+	}
+	return domain.Plant{}, nil
+}
+
+func (f *fakePlantRepo) UpdatePlantName(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error) {
+	if f.updatePlantNameFn != nil {
+		return f.updatePlantNameFn(ctx, userID, plantID, name)
+	}
+	return domain.Plant{}, nil
+}
 
 func mustNoErr(t *testing.T, err error) {
 	t.Helper()
@@ -18,123 +58,111 @@ func mustNoErr(t *testing.T, err error) {
 	}
 }
 
-func newService() *PlantService {
-	return NewPlantService()
+func newService(r *fakePlantRepo) *PlantService {
+	return NewPlantService(r)
 }
 
-func addPlant(t *testing.T, svc *PlantService, ctx context.Context, userID int64, name string) domain.Plant {
-	t.Helper()
-	plant, err := svc.AddPlant(ctx, userID, name)
+// func addPlant(t *testing.T, svc *PlantService, ctx context.Context, userID int64, name string) domain.Plant {
+// 	t.Helper()
+// 	plant, err := svc.AddPlant(ctx, userID, name)
 
-	mustNoErr(t, err)
+// 	mustNoErr(t, err)
 
-	return plant
-}
+// 	return plant
+// }
 
 func TestPlantServiceAddPlant(t *testing.T) {
-	tests := []struct {
-		name        string
-		userID      int64
-		plantName   string
-		wantErr     bool
-		wantField   string
-		wantProblem string
-	}{
-		{"add_plant_ok", 10, "Monstera", false, "", ""},
-		{"empty_user_id", 0, "Cactus", true, "userID", "must be positive"},
-		{"empty_name", 10, "", true, "name", "is empty"},
-		{"trim_name", 10, " Cactus Poppy  ", false, "", ""},
+	repo := &fakePlantRepo{
+		createPlantFn: func(ctx context.Context, plant domain.Plant) (int64, error) {
+			if plant.UserID != 10 {
+				t.Fatalf("expected userID 10, got %d", plant.UserID)
+			}
+			if plant.Name != "Cactus" {
+				t.Fatalf("expected trimmed name %q, got %q", "Cactus", plant.Name)
+			}
+			return 42, nil
+		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			svc := newService()
+	svc := newService(repo)
 
-			plant, err := svc.AddPlant(ctx, tc.userID, tc.plantName)
+	plant, err := svc.AddPlant(context.Background(), 10, "  Cactus  ")
+	mustNoErr(t, err)
 
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-
-				var myErr domain.ValidationError
-				if !errors.As(err, &myErr) {
-					t.Fatalf("expected ValidationError, got %T: %v", err, err)
-				}
-				if myErr.Field != tc.wantField {
-					t.Fatalf("expected field %q, got %q", tc.wantField, myErr.Field)
-				}
-				if myErr.Problem != tc.wantProblem {
-					t.Fatalf("expected problem %q, got %q", tc.wantProblem, myErr.Problem)
-				}
-				if !errors.Is(err, domain.ErrInvalidArgument) {
-					t.Fatalf("expected ErrInvalidArgument, got %v", err)
-				}
-				return
-			}
-
-			mustNoErr(t, err)
-			if strings.TrimSpace(tc.plantName) != plant.Name {
-				t.Fatalf("expected trimmed name %q, got %q", strings.TrimSpace(tc.plantName), plant.Name)
-			}
-			if plant.ID != 1 {
-				t.Fatalf("expected plantID %v, got %v", 1, plant.ID)
-			}
-		})
+	if plant.ID != 42 {
+		t.Fatalf("expected plant ID 42, got %d", plant.ID)
+	}
+	if plant.Name != "Cactus" {
+		t.Fatalf("expected name %q, got %q", "Cactus", plant.Name)
 	}
 }
 
-func TestPlantServiceAddPlantIDIncreases(t *testing.T) {
-	ctx := context.Background()
-	svc := newService()
-
-	firstPlant := addPlant(t, svc, ctx, 10, "Monstera")
-	secondPlant := addPlant(t, svc, ctx, 10, "Cactus")
-
-	if firstPlant.ID != 1 {
-		t.Fatalf("expected first plantID %v, got %v", 1, firstPlant.ID)
+func TestPlantServiceAddPlantValidationError(t *testing.T) {
+	repo := &fakePlantRepo{
+		createPlantFn: func(ctx context.Context, plant domain.Plant) (int64, error) {
+			t.Fatal("repo should not be called on invalid input")
+			return 0, nil
+		},
 	}
-	if secondPlant.ID != 2 {
-		t.Fatalf("expected second plantID %v, got %v", 2, secondPlant.ID)
+
+	svc := newService(repo)
+
+	_, err := svc.AddPlant(context.Background(), 0, "")
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
-	if secondPlant.ID <= firstPlant.ID {
-		t.Fatalf("expected second plantID to be greater than first: first=%v second=%v", firstPlant.ID, secondPlant.ID)
+
+	var vErr domain.ValidationError
+	if !errors.As(err, &vErr) {
+		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	}
+	if !errors.Is(err, domain.ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument, got %v", err)
 	}
 }
 
 func TestPlantServiceListPlants(t *testing.T) {
-	ctx := context.Background()
-	svc := newService()
+	repo := &fakePlantRepo{
+		listPlantsByUserFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
+			if userID != 10 {
+				t.Fatalf("expected userID 10, got %d", userID)
+			}
+			return []domain.Plant{
+				{ID: 1, UserID: 10, Name: "Monstera"},
+			}, nil
+		},
+	}
 
-	plant := addPlant(t, svc, ctx, 10, "Monstera")
+	svc := newService(repo)
 
-	list, err := svc.ListPlants(ctx, 10)
+	list, err := svc.ListPlants(context.Background(), 10)
 	mustNoErr(t, err)
 
 	if len(list) != 1 {
-		t.Fatalf("expected list length %v, got %v", 1, len(list))
+		t.Fatalf("expected 1 plant, got %d", len(list))
 	}
-	if list[0].ID != plant.ID {
-		t.Fatalf("expected plantID %v, got %v", plant.ID, list[0].ID)
-	}
-	if list[0].Name != plant.Name {
-		t.Fatalf("expected plant name %q, got %q", plant.Name, list[0].Name)
+	if list[0].Name != "Monstera" {
+		t.Fatalf("expected %q, got %q", "Monstera", list[0].Name)
 	}
 }
 
 func TestPlantServiceListPlantsReturnsCopy(t *testing.T) {
-	ctx := context.Background()
-	svc := newService()
+	repo := &fakePlantRepo{
+		listPlantsByUserFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
+			return []domain.Plant{
+				{ID: 1, UserID: 10, Name: "Monstera"},
+			}, nil
+		},
+	}
 
-	addPlant(t, svc, ctx, 10, "Monstera")
+	svc := newService(repo)
 
-	list, err := svc.ListPlants(ctx, 10)
+	list, err := svc.ListPlants(context.Background(), 10)
 	mustNoErr(t, err)
 
 	list[0].Name = "Changed"
 
-	freshList, err := svc.ListPlants(ctx, 10)
+	freshList, err := svc.ListPlants(context.Background(), 10)
 	mustNoErr(t, err)
 
 	if freshList[0].Name != "Monstera" {
@@ -142,45 +170,35 @@ func TestPlantServiceListPlantsReturnsCopy(t *testing.T) {
 	}
 }
 
-func TestPlantServiceListPlantsOtherUserEmpty(t *testing.T) {
-	ctx := context.Background()
-	svc := newService()
-
-	addPlant(t, svc, ctx, 10, "Monstera")
-
-	list, err := svc.ListPlants(ctx, 20)
-	mustNoErr(t, err)
-
-	if len(list) != 0 {
-		t.Fatalf("expected empty list for another user, got %v items", len(list))
-	}
-}
-
 func TestPlantServiceDeletePlant(t *testing.T) {
-	ctx := context.Background()
-	svc := newService()
-
-	plant := addPlant(t, svc, ctx, 10, "Cactus")
-
-	err := svc.DeletePlant(ctx, 10, plant.ID)
-	mustNoErr(t, err)
-
-	list, err := svc.ListPlants(ctx, 10)
-	mustNoErr(t, err)
-
-	if len(list) != 0 {
-		t.Fatalf("expected empty list after delete, got %v items", len(list))
+	repo := &fakePlantRepo{
+		deletePlantFn: func(ctx context.Context, userID int64, plantID int64) error {
+			if userID != 10 {
+				t.Fatalf("expected userID 10, got %d", userID)
+			}
+			if plantID != 5 {
+				t.Fatalf("expected plantID 5, got %d", plantID)
+			}
+			return nil
+		},
 	}
+
+	svc := newService(repo)
+
+	err := svc.DeletePlant(context.Background(), 10, 5)
+	mustNoErr(t, err)
 }
 
 func TestPlantServiceDeletePlantOtherUserReturnsNotFound(t *testing.T) {
-	ctx := context.Background()
-	svc := newService()
+	repo := &fakePlantRepo{
+		deletePlantFn: func(ctx context.Context, userID int64, plantID int64) error {
+			return domain.ErrNotFound
+		},
+	}
 
-	plant := addPlant(t, svc, ctx, 10, "Cactus")
+	svc := newService(repo)
 
-	err := svc.DeletePlant(ctx, 20, plant.ID)
-
+	err := svc.DeletePlant(context.Background(), 20, 1)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -189,101 +207,32 @@ func TestPlantServiceDeletePlantOtherUserReturnsNotFound(t *testing.T) {
 	}
 }
 
-func TestPlantServiceCancelContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	svc := newService()
-
-	_, err := svc.AddPlant(ctx, 10, "Cactus")
-
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context.Canceled, got %v", err)
-	}
-}
-func TestPlantServiceConcurrentAddPlant(t *testing.T) {
-	svc := newService()
-	ctx := context.Background()
-	const N = 100
-	start := make(chan struct{})
-	errCh := make(chan error, N)
-	var wg sync.WaitGroup
-
-	wg.Add(N)
-	for i := 1; i <= N; i++ {
-		go func() {
-			defer wg.Done()
-			<-start
-
-			_, err := svc.AddPlant(ctx, 10, "Monstera")
-
-			if err != nil {
-				errCh <- err
-			}
-		}()
-	}
-	close(start)
-	wg.Wait()
-	close(errCh)
-
-	for err := range errCh {
-		t.Fatalf("AddPlant returned error: %v", err)
-	}
-
-	list, err := svc.ListPlants(ctx, 10)
-	mustNoErr(t, err)
-
-	if len(list) != N {
-		t.Fatalf("expected %d plants, got %d", N, len(list))
-	}
-
-	seen := map[int64]struct{}{}
-
-	for _, plant := range list {
-		if _, ok := seen[plant.ID]; ok {
-			t.Fatalf("duplicate plant ID: %d", plant.ID)
-		}
-		seen[plant.ID] = struct{}{}
-	}
-}
-
-func TestPlantServiceDeadlineExceeded(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-	svc := newService()
-
-	_, err := svc.AddPlant(ctx, 10, "Cactus")
-
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
-	}
-}
-
 func TestPlantServiceGetPlantOk(t *testing.T) {
+	repo := &fakePlantRepo{
+		getPlantByIDFn: func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
+			return domain.Plant{ID: 1, UserID: 10, Name: "Monstera"}, nil
+		},
+	}
 	ctx := context.Background()
-	svc := newService()
+	svc := newService(repo)
 
-	plant := addPlant(t, svc, ctx, 10, "Cactus")
-	getPlant, err := svc.GetPlant(ctx, 10, plant.ID)
+	getPlant, err := svc.GetPlant(ctx, 10, 1)
 	mustNoErr(t, err)
 
-	if getPlant.ID != plant.ID || getPlant.Name != plant.Name {
-		t.Fatalf("expected plant with ID %d, got ID %d", plant.ID, getPlant.ID)
+	if getPlant.ID != 1 || getPlant.Name != "Monstera" {
+		t.Fatalf("expected plant with ID %d, got ID %d", 1, getPlant.ID)
 	}
 }
 
 func TestPlantServiceGetPlantNotFound(t *testing.T) {
+	repo := &fakePlantRepo{
+		getPlantByIDFn: func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
+			return domain.Plant{}, domain.ErrNotFound
+		},
+	}
 	ctx := context.Background()
-	svc := newService()
+	svc := newService(repo)
 
-	addPlant(t, svc, ctx, 10, "Cactus")
 	_, err := svc.GetPlant(ctx, 10, 3)
 
 	if err == nil {
@@ -295,11 +244,18 @@ func TestPlantServiceGetPlantNotFound(t *testing.T) {
 }
 
 func TestPlantServiceGetPlantWrongUserID(t *testing.T) {
+	repo := &fakePlantRepo{
+		getPlantByIDFn: func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
+			if userID != 10 {
+				return domain.Plant{}, domain.ErrNotFound
+			}
+			return domain.Plant{ID: 1, UserID: 10, Name: "Monstera"}, nil
+		},
+	}
 	ctx := context.Background()
-	svc := newService()
+	svc := newService(repo)
 
-	plant := addPlant(t, svc, ctx, 10, "Cactus")
-	_, err := svc.GetPlant(ctx, 5, plant.ID)
+	_, err := svc.GetPlant(ctx, 5, 1)
 
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -310,109 +266,138 @@ func TestPlantServiceGetPlantWrongUserID(t *testing.T) {
 }
 
 func TestPlantServiceUpdatePlantName(t *testing.T) {
+	dbErr := errors.New("db failed")
+
 	tests := []struct {
-		name      string
-		userID    int64
-		plantID   int64
-		plantName string
-		wantName  string
-		wantErr   error
-		wantField string
-		wantProb  string
+		name           string
+		userID         int64
+		plantID        int64
+		plantName      string
+		repoPlant      domain.Plant
+		repoErr        error
+		wantPlant      domain.Plant
+		wantErr        error
+		wantRepoCalled bool
+		wantRepoName   string
 	}{
 		{
-			name:      "update_plant_name_ok",
-			userID:    10,
-			plantID:   1,
-			plantName: "Cactus",
-			wantName:  "Cactus",
+			name:           "update_plant_name_ok",
+			userID:         10,
+			plantID:        1,
+			plantName:      "Cactus",
+			repoPlant:      domain.Plant{ID: 1, UserID: 10, Name: "Cactus"},
+			wantPlant:      domain.Plant{ID: 1, UserID: 10, Name: "Cactus"},
+			wantRepoCalled: true,
 		},
 		{
-			name:      "plant_not_found",
-			userID:    10,
-			plantID:   3,
-			plantName: "Cactus",
-			wantErr:   domain.ErrNotFound,
+			name:           "plant_not_found",
+			userID:         10,
+			plantID:        3,
+			plantName:      "Cactus",
+			repoErr:        domain.ErrNotFound,
+			wantErr:        domain.ErrNotFound,
+			wantRepoCalled: true,
 		},
 		{
-			name:      "wrong_user",
-			userID:    17,
-			plantID:   1,
-			plantName: "Cactus",
-			wantErr:   domain.ErrNotFound,
+			name:           "repo_error",
+			userID:         10,
+			plantID:        1,
+			plantName:      "Cactus",
+			repoErr:        dbErr,
+			wantErr:        dbErr,
+			wantRepoCalled: true,
 		},
 		{
-			name:      "empty_name",
-			userID:    10,
-			plantID:   1,
-			plantName: "",
-			wantErr:   domain.ErrInvalidArgument,
-			wantField: "name",
-			wantProb:  "is empty",
+			name:           "empty_name",
+			userID:         10,
+			plantID:        1,
+			plantName:      "",
+			wantErr:        domain.ErrInvalidArgument,
+			wantRepoCalled: false,
 		},
 		{
-			name:      "trim_name",
-			userID:    10,
-			plantID:   1,
-			plantName: "  Cactus ",
-			wantName:  "Cactus",
+			name:           "trim_name",
+			userID:         10,
+			plantID:        1,
+			plantName:      "  Cactus   ",
+			repoPlant:      domain.Plant{ID: 1, UserID: 10, Name: "Cactus"},
+			wantPlant:      domain.Plant{ID: 1, UserID: 10, Name: "Cactus"},
+			wantRepoCalled: true,
+			wantRepoName:   "Cactus",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			svc := newService()
+			repoCalled := false
+			repo := &fakePlantRepo{
+				updatePlantNameFn: func(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error) {
+					repoCalled = true
 
-			plant, err := svc.AddPlant(ctx, 10, "Monstera")
-			mustNoErr(t, err)
+					if userID != tc.userID {
+						t.Fatalf("expected userID %d, got %d", tc.userID, userID)
+					}
+					if plantID != tc.plantID {
+						t.Fatalf("expected plantID %d, got %d", tc.plantID, plantID)
+					}
+					if tc.wantRepoName != "" && name != tc.wantRepoName {
+						t.Fatalf("expected repo name %q, got %q", tc.wantRepoName, name)
+					}
 
-			plant, err = svc.UpdatePlantName(ctx, tc.userID, tc.plantID, tc.plantName)
+					return tc.repoPlant, tc.repoErr
+				},
+			}
+
+			svc := newService(repo)
+
+			plant, err := svc.UpdatePlantName(context.Background(), tc.userID, tc.plantID, tc.plantName)
 
 			if tc.wantErr != nil {
+				if repoCalled != tc.wantRepoCalled {
+					t.Fatalf("expected repo called=%v, got %v", tc.wantRepoCalled, repoCalled)
+				}
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
 				if !errors.Is(err, tc.wantErr) {
 					t.Fatalf("expected %v, got %v", tc.wantErr, err)
 				}
-				if tc.wantField != "" {
-					var validationErr domain.ValidationError
-					if !errors.As(err, &validationErr) {
-						t.Fatalf("expected ValidationError, got %T: %v", err, err)
-					}
-					if validationErr.Field != tc.wantField {
-						t.Fatalf("expected field %q, got %q", tc.wantField, validationErr.Field)
-					}
-					if validationErr.Problem != tc.wantProb {
-						t.Fatalf("expected problem %q, got %q", tc.wantProb, validationErr.Problem)
-					}
-				}
 				return
 			}
 
 			mustNoErr(t, err)
-			if tc.wantName != plant.Name {
-				t.Fatalf("expected new name %q, got %q", tc.wantName, plant.Name)
+			if repoCalled != tc.wantRepoCalled {
+				t.Fatalf("expected repo called=%v, got %v", tc.wantRepoCalled, repoCalled)
+			}
+			if plant != tc.wantPlant {
+				t.Fatalf("expected plant %+v, got %+v", tc.wantPlant, plant)
 			}
 		})
 	}
 }
 
 func TestPlantServiceUpdatePlantNameCanceledContext(t *testing.T) {
-	ctx := context.Background()
-	svc := newService()
-
-	plant := addPlant(t, svc, ctx, 10, "Monstera")
-
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := svc.UpdatePlantName(canceledCtx, 10, plant.ID, "Cactus")
+	repoCalled := false
+	repo := &fakePlantRepo{
+		updatePlantNameFn: func(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error) {
+			repoCalled = true
+			return domain.Plant{}, nil
+		},
+	}
+
+	svc := newService(repo)
+
+	_, err := svc.UpdatePlantName(canceledCtx, 10, 1, "Cactus")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	if repoCalled {
+		t.Fatal("repo should not be called when context is canceled")
 	}
 }

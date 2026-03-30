@@ -2,23 +2,18 @@ package usecase
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/dCatherinee/plant-care-bot/internal/domain"
+	"github.com/dCatherinee/plant-care-bot/internal/repo"
 )
 
 type PlantService struct {
-	mu           sync.Mutex
-	nextID       int64
-	plantsByUser map[int64][]domain.Plant
+	repo repo.PlantRepository
 }
 
-func NewPlantService() *PlantService {
-	return &PlantService{
-		nextID:       0,
-		plantsByUser: make(map[int64][]domain.Plant),
-	}
+func NewPlantService(r repo.PlantRepository) *PlantService {
+	return &PlantService{repo: r}
 }
 
 func (s *PlantService) AddPlant(ctx context.Context, userID int64, name string) (domain.Plant, error) {
@@ -34,12 +29,14 @@ func (s *PlantService) AddPlant(ctx context.Context, userID int64, name string) 
 
 	select {
 	case <-time.After(50 * time.Millisecond):
-		s.mu.Lock()
-		defer s.mu.Unlock()
 
-		s.nextID++
-		plant.ID = s.nextID
-		s.plantsByUser[userID] = append(s.plantsByUser[userID], plant)
+		plantID, err := s.repo.CreatePlant(ctx, plant)
+
+		if err != nil {
+			return domain.Plant{}, err
+		}
+
+		plant.ID = plantID
 
 		return plant, nil
 	case <-ctx.Done():
@@ -52,10 +49,11 @@ func (s *PlantService) ListPlants(ctx context.Context, userID int64) ([]domain.P
 		return nil, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	userPlants, err := s.repo.ListPlantsByUser(ctx, userID)
 
-	userPlants := s.plantsByUser[userID]
+	if err != nil {
+		return nil, err
+	}
 
 	result := make([]domain.Plant, len(userPlants))
 	copy(result, userPlants)
@@ -67,22 +65,13 @@ func (s *PlantService) DeletePlant(ctx context.Context, userID int64, plantID in
 		return err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	err := s.repo.DeletePlant(ctx, userID, plantID)
 
-	userPlants := s.plantsByUser[userID]
-
-	for i, plant := range userPlants {
-		if plant.ID != plantID {
-			continue
-		}
-
-		userPlants = append(userPlants[:i], userPlants[i+1:]...)
-		s.plantsByUser[userID] = userPlants
-		return nil
+	if err != nil {
+		return err
 	}
 
-	return domain.ErrNotFound
+	return nil
 }
 
 func (s *PlantService) GetPlant(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
@@ -90,18 +79,13 @@ func (s *PlantService) GetPlant(ctx context.Context, userID int64, plantID int64
 		return domain.Plant{}, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	plant, err := s.repo.GetPlantByID(ctx, userID, plantID)
 
-	userPlants := s.plantsByUser[userID]
-
-	for _, plant := range userPlants {
-		if plantID == plant.ID {
-			return plant, nil
-		}
+	if err != nil {
+		return domain.Plant{}, err
 	}
 
-	return domain.Plant{}, domain.ErrNotFound
+	return plant, nil
 }
 
 func (s *PlantService) UpdatePlantName(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error) {
@@ -109,22 +93,15 @@ func (s *PlantService) UpdatePlantName(ctx context.Context, userID int64, plantI
 		return domain.Plant{}, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	userPlants := s.plantsByUser[userID]
-
-	for i := range userPlants {
-		if plantID != userPlants[i].ID {
-			continue
-		}
-
-		if err := userPlants[i].Rename(name); err != nil {
-			return domain.Plant{}, err
-		}
-
-		return userPlants[i], nil
+	normalizedName, err := domain.NormalizePlantName(name)
+	if err != nil {
+		return domain.Plant{}, err
 	}
 
-	return domain.Plant{}, domain.ErrNotFound
+	plant, err := s.repo.UpdatePlantName(ctx, userID, plantID, normalizedName)
+	if err != nil {
+		return domain.Plant{}, err
+	}
+
+	return plant, nil
 }
