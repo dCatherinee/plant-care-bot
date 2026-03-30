@@ -17,7 +17,7 @@ func NewPlant(userID int64, name string) (Plant, error) {
 	if userID <= 0 {
 		return Plant{}, ValidationError{Field: "userID", Problem: "must be positive"}
 	}
-	normalizedName, err := normalizePlantName(name)
+	normalizedName, err := NormalizePlantName(name)
 	if err != nil {
 		return Plant{}, err
 	}
@@ -30,7 +30,7 @@ func NewPlant(userID int64, name string) (Plant, error) {
 }
 
 func (p *Plant) Rename(name string) error {
-	normalizedName, err := normalizePlantName(name)
+	normalizedName, err := NormalizePlantName(name)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (p *Plant) Rename(name string) error {
 	return nil
 }
 
-func normalizePlantName(name string) (string, error) {
+func NormalizePlantName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", ValidationError{

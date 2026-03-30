@@ -196,3 +196,121 @@ func TestPlantRepositoryDeletePlant_Integration(t *testing.T) {
 		}
 	})
 }
+
+func TestPlantRepositoryGetPlantByID_Integration(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		db := newTestDB(t)
+		cleanupTables(t, db)
+
+		userID := createTestUser(t, 2004)
+		plantID := createTestPlant(t, userID, "Monstera", time.Date(2026, time.March, 25, 15, 0, 0, 0, time.UTC))
+		repo := NewPlantRepository(db)
+		ctx := context.Background()
+
+		if _, err := repo.GetPlantByID(ctx, userID, plantID); err != nil {
+			t.Fatalf("GetPlantByID returned error: %v", err)
+		}
+	})
+
+	t.Run("not_found", func(t *testing.T) {
+		db := newTestDB(t)
+		cleanupTables(t, db)
+
+		userID := createTestUser(t, 2004)
+		repo := NewPlantRepository(db)
+		ctx := context.Background()
+
+		_, err := repo.GetPlantByID(ctx, userID, 10)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("db_failed", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+		defer cancel()
+
+		db, err := sql.Open("pgx", "postgres://invalid:invalid@127.0.0.1:1/invalid?sslmode=disable")
+		if err != nil {
+			t.Fatalf("sql.Open returned error: %v", err)
+		}
+		defer db.Close()
+
+		repo := NewPlantRepository(db)
+
+		_, err = repo.GetPlantByID(ctx, 10, 1)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		if errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected db error, got ErrNotFound: %v", err)
+		}
+	})
+}
+
+func TestPlantRepositoryUpdatePlantName_Integration(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		db := newTestDB(t)
+		cleanupTables(t, db)
+
+		userID := createTestUser(t, 2004)
+		plantID := createTestPlant(t, userID, "Monstera", time.Date(2026, time.March, 25, 15, 0, 0, 0, time.UTC))
+		newName := "Cactus"
+		repo := NewPlantRepository(db)
+		ctx := context.Background()
+
+		plant, err := repo.UpdatePlantName(ctx, userID, plantID, newName)
+		if err != nil {
+			t.Fatalf("UpdatePlantName returned error: %v", err)
+		}
+
+		if plant.Name != newName {
+			t.Fatalf("expected plant name %q, got %q", newName, plant.Name)
+		}
+	})
+
+	t.Run("not_found", func(t *testing.T) {
+		db := newTestDB(t)
+		cleanupTables(t, db)
+
+		userID := createTestUser(t, 2004)
+		newName := "Cactus"
+		repo := NewPlantRepository(db)
+		ctx := context.Background()
+
+		_, err := repo.UpdatePlantName(ctx, userID, 10, newName)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("wrong_user", func(t *testing.T) {
+		db := newTestDB(t)
+		cleanupTables(t, db)
+
+		firstUserID := createTestUser(t, 2004)
+		secondUserID := createTestUser(t, 2005)
+		plantID := createTestPlant(t, firstUserID, "Monstera", time.Date(2026, time.March, 25, 15, 0, 0, 0, time.UTC))
+		newName := "Cactus"
+		repo := NewPlantRepository(db)
+		ctx := context.Background()
+
+		_, err := repo.UpdatePlantName(ctx, secondUserID, plantID, newName)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+}
