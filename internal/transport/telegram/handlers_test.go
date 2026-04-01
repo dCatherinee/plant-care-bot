@@ -98,7 +98,7 @@ func TestStubHandlersSendExpectedText(t *testing.T) {
 			handler: func(ctx context.Context, bt *Bot, update *models.Update) {
 				bt.handleHelp(ctx, nil, update)
 			},
-			want: `Раздел "Help" пока в разработке ℹ️`,
+			want: `Раздел "Помощь" пока в разработке ℹ️`,
 		},
 	}
 

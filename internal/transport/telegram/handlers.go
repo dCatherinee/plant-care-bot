@@ -37,7 +37,7 @@ func (b *Bot) handleSettings(ctx context.Context, _ *bot.Bot, update *models.Upd
 }
 
 func (b *Bot) handleHelp(ctx context.Context, _ *bot.Bot, update *models.Update) {
-	b.replyStub(ctx, update, `Раздел "Help" пока в разработке ℹ️`)
+	b.replyStub(ctx, update, `Раздел "Помощь" пока в разработке ℹ️`)
 }
 
 func (b *Bot) replyStub(ctx context.Context, update *models.Update, text string) {
