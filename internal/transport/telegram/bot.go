@@ -15,6 +15,24 @@ type Bot struct {
 	log *slog.Logger
 }
 
+func (b *Bot) sendText(ctx context.Context, bt *bot.Bot, update *models.Update, command string, text string) {
+	if update.Message == nil {
+		return
+	}
+
+	_, err := bt.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.Message.Chat.ID,
+		Text:   text,
+	})
+	if err != nil {
+		b.log.Error("send response", "command", command, "err", err)
+	}
+}
+
+func (b *Bot) registerHandlers() {
+	b.api.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommand, b.handleStart)
+}
+
 func New(token string, logger *slog.Logger) (*Bot, error) {
 	if token == "" {
 		return nil, errors.New("telegram token is empty")
@@ -38,7 +56,7 @@ func New(token string, logger *slog.Logger) (*Bot, error) {
 }
 
 func (b *Bot) Run(ctx context.Context) error {
-	b.api.RegisterHandler(bot.HandlerTypeMessageText, "/start", bot.MatchTypeExact, b.handleStart)
+	b.registerHandlers()
 
 	b.log.Info("telegram bot started")
 	b.api.Start(ctx)
@@ -48,15 +66,5 @@ func (b *Bot) Run(ctx context.Context) error {
 }
 
 func (b *Bot) handleStart(ctx context.Context, bt *bot.Bot, update *models.Update) {
-	if update.Message == nil {
-		return
-	}
-
-	_, err := bt.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   "Привет! Я бот для ухода за растениями 🌿",
-	})
-	if err != nil {
-		b.log.Error("send /start response", "err", err)
-	}
+	b.sendText(ctx, bt, update, "/start", "Привет! Я бот для ухода за растениями 🌿")
 }
