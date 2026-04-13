@@ -284,7 +284,7 @@ func TestHandleAddPlantEmptyName(t *testing.T) {
 		t.Fatalf("expected chat ID %d, got %d", chatID, gotChatID)
 	}
 
-	wantText := "Имя растения не должно быть пустым. Введи название ещё раз."
+	wantText := "Имя растения не должно быть пустым."
 	if gotText != wantText {
 		t.Fatalf("expected text %q, got %q", wantText, gotText)
 	}

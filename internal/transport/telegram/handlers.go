@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dCatherinee/plant-care-bot/internal/domain"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 )
@@ -101,13 +102,27 @@ func (b *Bot) handleTextByState(ctx context.Context, _ *bot.Bot, update *models.
 	}
 }
 
-func (b *Bot) handlePlantNameInput(ctx context.Context, chatID, userID int64, text string) {
-	name := strings.TrimSpace(text)
+func validatePlantName(name string) error {
+	name = strings.TrimSpace(name)
+
 	if name == "" {
+		return domain.ErrPlantNameEmpty
+	}
+
+	if len([]rune(name)) > 50 {
+		return domain.ErrInvalidPlantName
+	}
+
+	return nil
+}
+
+func (b *Bot) handlePlantNameInput(ctx context.Context, chatID, userID int64, text string) {
+	err := validatePlantName(text)
+	if err != nil {
 		err := b.sendTextWithKeyboard(
 			ctx,
 			chatID,
-			"Имя растения не должно быть пустым. Введи название ещё раз.",
+			userMessageFromError(err),
 			cancelKeyboard(),
 		)
 		if err != nil {
@@ -116,9 +131,11 @@ func (b *Bot) handlePlantNameInput(ctx context.Context, chatID, userID int64, te
 		return
 	}
 
+	name := strings.TrimSpace(text)
+
 	b.states.Clear(userID)
 
-	err := b.sendTextWithKeyboard(
+	err = b.sendTextWithKeyboard(
 		ctx,
 		chatID,
 		fmt.Sprintf("Растение \"%s\" добавлено 🌿", name),
