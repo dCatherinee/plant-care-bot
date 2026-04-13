@@ -66,7 +66,7 @@ func (b *Bot) replyStub(ctx context.Context, update *models.Update, text string)
 }
 
 func (b *Bot) handleAddPlant(ctx context.Context, _ *bot.Bot, update *models.Update) {
-	if update == nil || update.Message == nil {
+	if update == nil || update.Message == nil || update.Message.From == nil {
 		return
 	}
 
