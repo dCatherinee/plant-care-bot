@@ -16,6 +16,9 @@ func userMessageFromError(err error) string {
 	case errors.Is(err, domain.ErrPlantAlreadyExists):
 		return "Растение с таким именем уже есть."
 
+	case errors.Is(err, domain.ErrNotFound):
+		return "Растение не найдено."
+
 	default:
 		return "Что-то пошло не так. Попробуй ещё раз позже."
 	}

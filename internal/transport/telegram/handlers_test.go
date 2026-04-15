@@ -370,6 +370,155 @@ func TestHandleListPlantsEnsureUserError(t *testing.T) {
 	}
 }
 
+func TestHandleDeletePlantStartsDeleteFlow(t *testing.T) {
+	var gotChatID int64
+	var gotText string
+	var gotKeyboard models.InlineKeyboardMarkup
+
+	b := &Bot{
+		log:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		pendingDeletes: NewPendingDeleteStore(),
+		states:         NewStateStore(),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				return domain.User{ID: 77, TelegramUserID: telegramUserID}, nil
+			},
+		},
+		plants: plantUsecaseStub{
+			listPlantsFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
+				return []domain.Plant{
+					{ID: 1, UserID: userID, Name: "Monstera"},
+					{ID: 2, UserID: userID, Name: "Cactus"},
+				}, nil
+			},
+		},
+		sendTextWithInlineKeyboardFn: func(_ context.Context, chatID int64, text string, keyboard models.InlineKeyboardMarkup) error {
+			gotChatID = chatID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+	}
+
+	b.handleDeletePlant(context.Background(), nil, testUpdateFromUser(42, 1001, buttonDeletePlant))
+
+	if gotChatID != 42 {
+		t.Fatalf("expected chat ID %d, got %d", 42, gotChatID)
+	}
+
+	wantText := "Выбери растение для удаления:"
+	if gotText != wantText {
+		t.Fatalf("expected text %q, got %q", wantText, gotText)
+	}
+
+	if gotKeyboard.InlineKeyboard[0][0].CallbackData != callbackDeleteSelectPrefix+"1" {
+		t.Fatalf("unexpected first delete button: %#v", gotKeyboard.InlineKeyboard[0][0])
+	}
+}
+
+func TestHandleDeletePlantSelectionAndConfirm(t *testing.T) {
+	var gotEditChatID int64
+	var gotEditMessageID int
+	var gotText string
+	var gotKeyboard models.InlineKeyboardMarkup
+	var gotAnsweredCallbackID string
+
+	b := &Bot{
+		log:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		pendingDeletes: NewPendingDeleteStore(),
+		states:         NewStateStore(),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				return domain.User{ID: 77, TelegramUserID: telegramUserID}, nil
+			},
+		},
+		plants: plantUsecaseStub{
+			getPlantFn: func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
+				return domain.Plant{ID: plantID, UserID: userID, Name: "Monstera"}, nil
+			},
+			deletePlantFn: func(ctx context.Context, userID int64, plantID int64) error {
+				if userID != 77 || plantID != 1 {
+					t.Fatalf("unexpected delete params userID=%d plantID=%d", userID, plantID)
+				}
+				return nil
+			},
+		},
+		editMessageTextWithInlineKeyboardFn: func(_ context.Context, chatID int64, messageID int, text string, keyboard models.InlineKeyboardMarkup) error {
+			gotEditChatID = chatID
+			gotEditMessageID = messageID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+		answerCallbackQueryFn: func(_ context.Context, callbackQueryID string) error {
+			gotAnsweredCallbackID = callbackQueryID
+			return nil
+		},
+	}
+
+	b.handleDeleteSelectCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-1", callbackDeleteSelectPrefix+"1"))
+
+	if gotEditChatID != 42 || gotEditMessageID != 55 {
+		t.Fatalf("expected edited message 42/55, got %d/%d", gotEditChatID, gotEditMessageID)
+	}
+
+	if gotAnsweredCallbackID != "cb-1" {
+		t.Fatalf("expected answered callback %q, got %q", "cb-1", gotAnsweredCallbackID)
+	}
+
+	if gotText != `Удалить растение "Monstera"?` {
+		t.Fatalf("expected confirm text, got %q", gotText)
+	}
+
+	if !reflect.DeepEqual(gotKeyboard, deleteConfirmInlineKeyboard(1)) {
+		t.Fatalf("expected delete confirm keyboard, got %#v", gotKeyboard)
+	}
+
+	pending, ok := b.pendingDeleteStore().Get(1001)
+	if !ok || pending.plantID != 1 {
+		t.Fatalf("expected pending delete for plant 1, got %+v, ok=%v", pending, ok)
+	}
+
+	b.handleDeleteConfirmCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-2", callbackDeleteConfirmPrefix+"1"))
+
+	if gotText != `Растение "Monstera" удалено.` {
+		t.Fatalf("expected delete confirmation text, got %q", gotText)
+	}
+
+	if len(gotKeyboard.InlineKeyboard) != 0 {
+		t.Fatalf("expected empty inline keyboard after delete, got %#v", gotKeyboard)
+	}
+}
+
+func TestHandleDeleteCancelCallback(t *testing.T) {
+	var gotText string
+	var gotKeyboard models.InlineKeyboardMarkup
+
+	b := &Bot{
+		log:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		pendingDeletes: NewPendingDeleteStore(),
+		editMessageTextWithInlineKeyboardFn: func(_ context.Context, chatID int64, messageID int, text string, keyboard models.InlineKeyboardMarkup) error {
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+		answerCallbackQueryFn: func(_ context.Context, callbackQueryID string) error {
+			return nil
+		},
+	}
+
+	b.pendingDeleteStore().Set(1001, pendingDelete{userID: 77, plantID: 1, plantName: "Monstera"})
+	b.handleDeleteCancelCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-cancel", callbackDeleteCancel))
+
+	if gotText != "Удаление отменено." {
+		t.Fatalf("expected cancel text, got %q", gotText)
+	}
+
+	if len(gotKeyboard.InlineKeyboard) != 0 {
+		t.Fatalf("expected empty inline keyboard after cancel, got %#v", gotKeyboard)
+	}
+}
+
 func TestHandleAddPlantValidName(t *testing.T) {
 	var gotChatID int64
 	var gotText string
@@ -669,6 +818,25 @@ func testUpdateFromUser(chatID, userID int64, text string) *models.Update {
 				ID: userID,
 			},
 			Text: text,
+		},
+	}
+}
+
+func testDeleteCallbackUpdate(chatID, userID int64, messageID int, callbackID, data string) *models.Update {
+	return &models.Update{
+		CallbackQuery: &models.CallbackQuery{
+			ID:   callbackID,
+			From: models.User{ID: userID},
+			Data: data,
+			Message: models.MaybeInaccessibleMessage{
+				Type: models.MaybeInaccessibleMessageTypeMessage,
+				Message: &models.Message{
+					ID: messageID,
+					Chat: models.Chat{
+						ID: chatID,
+					},
+				},
+			},
 		},
 	}
 }

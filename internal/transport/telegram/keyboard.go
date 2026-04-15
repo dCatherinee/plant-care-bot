@@ -9,10 +9,15 @@ const (
 	buttonSettings  = "Настройки"
 	buttonHelp      = "Помощь"
 
-	buttonAddPlant   = "Добавить растение"
-	buttonListPlants = "Список растений"
-	buttonBackToMenu = "Меню"
-	buttonCancel     = "Отмена"
+	buttonAddPlant    = "Добавить растение"
+	buttonListPlants  = "Список растений"
+	buttonDeletePlant = "Удалить растение"
+	buttonBackToMenu  = "Меню"
+	buttonCancel      = "Отмена"
+
+	callbackDeleteSelectPrefix  = "delete:select:"
+	callbackDeleteConfirmPrefix = "delete:confirm:"
+	callbackDeleteCancel        = "delete:cancel"
 )
 
 func mainMenuKeyboard() models.ReplyKeyboardMarkup {
@@ -43,6 +48,9 @@ func plantsMenuKeyboard() models.ReplyKeyboardMarkup {
 				{Text: buttonListPlants},
 			},
 			{
+				{Text: buttonDeletePlant},
+			},
+			{
 				{Text: buttonBackToMenu},
 			},
 		},
@@ -56,6 +64,41 @@ func cancelKeyboard() models.ReplyKeyboardMarkup {
 			{
 				{Text: buttonCancel},
 				{Text: buttonBackToMenu},
+			},
+		},
+	}
+}
+
+func deletePlantsInlineKeyboard(plants []models.InlineKeyboardButton) models.InlineKeyboardMarkup {
+	rows := make([][]models.InlineKeyboardButton, 0, len(plants)+1)
+	for _, button := range plants {
+		rows = append(rows, []models.InlineKeyboardButton{button})
+	}
+
+	rows = append(rows, []models.InlineKeyboardButton{
+		{
+			Text:         buttonCancel,
+			CallbackData: callbackDeleteCancel,
+		},
+	})
+
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: rows,
+	}
+}
+
+func deleteConfirmInlineKeyboard(plantID int64) models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{
+					Text:         "Удалить",
+					CallbackData: callbackDeleteConfirmPrefix + int64ToString(plantID),
+				},
+				{
+					Text:         buttonCancel,
+					CallbackData: callbackDeleteCancel,
+				},
 			},
 		},
 	}

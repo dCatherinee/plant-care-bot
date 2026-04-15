@@ -43,6 +43,11 @@ func TestUserMessageFromError(t *testing.T) {
 			want: "Растение с таким именем уже есть.",
 		},
 		{
+			name: "not found",
+			err:  domain.ErrNotFound,
+			want: "Растение не найдено.",
+		},
+		{
 			name: "unexpected error",
 			err:  errors.New("db failed"),
 			want: "Что-то пошло не так. Попробуй ещё раз позже.",
