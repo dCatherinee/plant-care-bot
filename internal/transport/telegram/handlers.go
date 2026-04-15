@@ -131,14 +131,40 @@ func (b *Bot) handlePlantNameInput(ctx context.Context, chatID, userID int64, te
 		return
 	}
 
-	name := strings.TrimSpace(text)
+	user, err := b.users.EnsureUser(ctx, userID)
+	if err != nil {
+		err := b.sendTextWithKeyboard(
+			ctx,
+			chatID,
+			userMessageFromError(err),
+			cancelKeyboard(),
+		)
+		if err != nil {
+			b.log.Error("send ensure user error", "err", err)
+		}
+		return
+	}
+
+	plant, err := b.plants.AddPlant(ctx, user.ID, text)
+	if err != nil {
+		err := b.sendTextWithKeyboard(
+			ctx,
+			chatID,
+			userMessageFromError(err),
+			cancelKeyboard(),
+		)
+		if err != nil {
+			b.log.Error("send add plant error", "err", err)
+		}
+		return
+	}
 
 	b.states.Clear(userID)
 
 	err = b.sendTextWithKeyboard(
 		ctx,
 		chatID,
-		fmt.Sprintf("Растение \"%s\" добавлено 🌿", name),
+		fmt.Sprintf("Растение \"%s\" добавлено 🌿", plant.Name),
 		plantsMenuKeyboard(),
 	)
 	if err != nil {

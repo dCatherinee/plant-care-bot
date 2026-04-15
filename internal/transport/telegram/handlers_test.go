@@ -6,9 +6,71 @@ import (
 	"log/slog"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/dCatherinee/plant-care-bot/internal/domain"
 	"github.com/go-telegram/bot/models"
 )
+
+type plantUsecaseStub struct {
+	addPlantFn        func(ctx context.Context, userID int64, name string) (domain.Plant, error)
+	listPlantsFn      func(ctx context.Context, userID int64) ([]domain.Plant, error)
+	getPlantFn        func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error)
+	updatePlantNameFn func(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error)
+	deletePlantFn     func(ctx context.Context, userID int64, plantID int64) error
+}
+
+func (s plantUsecaseStub) AddPlant(ctx context.Context, userID int64, name string) (domain.Plant, error) {
+	if s.addPlantFn != nil {
+		return s.addPlantFn(ctx, userID, name)
+	}
+
+	return domain.Plant{}, nil
+}
+
+func (s plantUsecaseStub) ListPlants(ctx context.Context, userID int64) ([]domain.Plant, error) {
+	if s.listPlantsFn != nil {
+		return s.listPlantsFn(ctx, userID)
+	}
+
+	return nil, nil
+}
+
+func (s plantUsecaseStub) GetPlant(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
+	if s.getPlantFn != nil {
+		return s.getPlantFn(ctx, userID, plantID)
+	}
+
+	return domain.Plant{}, nil
+}
+
+func (s plantUsecaseStub) UpdatePlantName(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error) {
+	if s.updatePlantNameFn != nil {
+		return s.updatePlantNameFn(ctx, userID, plantID, name)
+	}
+
+	return domain.Plant{}, nil
+}
+
+func (s plantUsecaseStub) DeletePlant(ctx context.Context, userID int64, plantID int64) error {
+	if s.deletePlantFn != nil {
+		return s.deletePlantFn(ctx, userID, plantID)
+	}
+
+	return nil
+}
+
+type userUsecaseStub struct {
+	ensureUserFn func(ctx context.Context, telegramUserID int64) (domain.User, error)
+}
+
+func (s userUsecaseStub) EnsureUser(ctx context.Context, telegramUserID int64) (domain.User, error) {
+	if s.ensureUserFn != nil {
+		return s.ensureUserFn(ctx, telegramUserID)
+	}
+
+	return domain.User{}, nil
+}
 
 func TestHandleStartSendsWelcomeTextWithKeyboard(t *testing.T) {
 	var gotChatID int64
@@ -203,10 +265,34 @@ func TestHandleAddPlantValidName(t *testing.T) {
 	var gotChatID int64
 	var gotText string
 	var gotKeyboard models.ReplyKeyboardMarkup
+	var gotTelegramUserID int64
+	var gotUserID int64
+	var gotName string
 	ctx := context.Background()
 
 	b := &Bot{
-		log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				gotTelegramUserID = telegramUserID
+				return domain.User{
+					ID:             77,
+					TelegramUserID: telegramUserID,
+					CreatedAt:      time.Date(2026, time.April, 15, 12, 0, 0, 0, time.UTC),
+				}, nil
+			},
+		},
+		plants: plantUsecaseStub{
+			addPlantFn: func(ctx context.Context, userID int64, name string) (domain.Plant, error) {
+				gotUserID = userID
+				gotName = name
+				return domain.Plant{
+					ID:     1,
+					UserID: userID,
+					Name:   "Фикус",
+				}, nil
+			},
+		},
 		states: NewStateStore(),
 		sendTextFn: func(_ context.Context, chatID int64, text string) error {
 			gotChatID = chatID
@@ -234,6 +320,18 @@ func TestHandleAddPlantValidName(t *testing.T) {
 	b.handleTextByState(ctx, nil, testUpdateFromUser(chatID, userID, "Фикус"))
 	if gotChatID != chatID {
 		t.Fatalf("expected chat ID %d, got %d", chatID, gotChatID)
+	}
+
+	if gotTelegramUserID != userID {
+		t.Fatalf("expected EnsureUser telegram user ID %d, got %d", userID, gotTelegramUserID)
+	}
+
+	if gotUserID != 77 {
+		t.Fatalf("expected AddPlant user ID %d, got %d", 77, gotUserID)
+	}
+
+	if gotName != "Фикус" {
+		t.Fatalf("expected AddPlant name %q, got %q", "Фикус", gotName)
 	}
 
 	wantText := `Растение "Фикус" добавлено 🌿`
@@ -291,6 +389,64 @@ func TestHandleAddPlantEmptyName(t *testing.T) {
 
 	if !reflect.DeepEqual(gotKeyboard, cancelKeyboard()) {
 		t.Fatalf("expected cancel keyboard, got %#v", gotKeyboard)
+	}
+
+	if newState := b.states.Get(userID); newState != StateWaitingPlantName {
+		t.Fatalf("expected state %q, got %q", StateWaitingPlantName, newState)
+	}
+}
+
+func TestHandleAddPlantEnsureUserError(t *testing.T) {
+	var gotChatID int64
+	var gotText string
+	var gotKeyboard models.ReplyKeyboardMarkup
+	addPlantCalled := false
+	ctx := context.Background()
+
+	b := &Bot{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				return domain.User{}, context.DeadlineExceeded
+			},
+		},
+		plants: plantUsecaseStub{
+			addPlantFn: func(ctx context.Context, userID int64, name string) (domain.Plant, error) {
+				addPlantCalled = true
+				return domain.Plant{}, nil
+			},
+		},
+		states: NewStateStore(),
+		sendTextWithKeyboardFn: func(_ context.Context, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) error {
+			gotChatID = chatID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+	}
+
+	const (
+		chatID = int64(42)
+		userID = int64(1001)
+	)
+
+	b.handleAddPlant(ctx, nil, testUpdateFromUser(chatID, userID, buttonAddPlant))
+	b.handlePlantNameInput(ctx, chatID, userID, "Фикус")
+
+	if gotChatID != chatID {
+		t.Fatalf("expected chat ID %d, got %d", chatID, gotChatID)
+	}
+
+	if gotText != "Что-то пошло не так. Попробуй ещё раз позже." {
+		t.Fatalf("expected generic error text, got %q", gotText)
+	}
+
+	if !reflect.DeepEqual(gotKeyboard, cancelKeyboard()) {
+		t.Fatalf("expected cancel keyboard, got %#v", gotKeyboard)
+	}
+
+	if addPlantCalled {
+		t.Fatal("AddPlant should not be called when EnsureUser fails")
 	}
 
 	if newState := b.states.Get(userID); newState != StateWaitingPlantName {
