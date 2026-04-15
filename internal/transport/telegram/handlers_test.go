@@ -261,6 +261,115 @@ func TestHandleAddPlantsSendTextWithKeyboard(t *testing.T) {
 	}
 }
 
+func TestHandleListPlants(t *testing.T) {
+	var gotChatID int64
+	var gotText string
+	var gotKeyboard models.ReplyKeyboardMarkup
+	var gotTelegramUserID int64
+	var gotUserID int64
+
+	b := &Bot{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				gotTelegramUserID = telegramUserID
+				return domain.User{
+					ID:             77,
+					TelegramUserID: telegramUserID,
+				}, nil
+			},
+		},
+		plants: plantUsecaseStub{
+			listPlantsFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
+				gotUserID = userID
+				return []domain.Plant{
+					{ID: 1, UserID: userID, Name: "Monstera"},
+					{ID: 2, UserID: userID, Name: "Cactus"},
+				}, nil
+			},
+		},
+		sendTextWithKeyboardFn: func(_ context.Context, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) error {
+			gotChatID = chatID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+	}
+
+	b.handleListPlants(context.Background(), nil, testUpdateFromUser(42, 1001, buttonListPlants))
+
+	if gotChatID != 42 {
+		t.Fatalf("expected chat ID %d, got %d", 42, gotChatID)
+	}
+
+	if gotTelegramUserID != 1001 {
+		t.Fatalf("expected EnsureUser telegram user ID %d, got %d", 1001, gotTelegramUserID)
+	}
+
+	if gotUserID != 77 {
+		t.Fatalf("expected ListPlants user ID %d, got %d", 77, gotUserID)
+	}
+
+	wantText := "Твои растения:\n1. Monstera\n2. Cactus"
+	if gotText != wantText {
+		t.Fatalf("expected text %q, got %q", wantText, gotText)
+	}
+
+	if !reflect.DeepEqual(gotKeyboard, plantsMenuKeyboard()) {
+		t.Fatalf("expected plants menu keyboard, got %#v", gotKeyboard)
+	}
+}
+
+func TestHandleListPlantsEnsureUserError(t *testing.T) {
+	var gotChatID int64
+	var gotText string
+	var gotKeyboard models.ReplyKeyboardMarkup
+	listPlantsCalled := false
+
+	b := &Bot{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				return domain.User{}, domain.ValidationError{
+					Field:   "telegramUserID",
+					Problem: "must be positive",
+				}
+			},
+		},
+		plants: plantUsecaseStub{
+			listPlantsFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
+				listPlantsCalled = true
+				return nil, nil
+			},
+		},
+		sendTextWithKeyboardFn: func(_ context.Context, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) error {
+			gotChatID = chatID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+	}
+
+	b.handleListPlants(context.Background(), nil, testUpdateFromUser(42, 1001, buttonListPlants))
+
+	if gotChatID != 42 {
+		t.Fatalf("expected chat ID %d, got %d", 42, gotChatID)
+	}
+
+	wantText := "Не удалось определить пользователя. Попробуй ещё раз позже."
+	if gotText != wantText {
+		t.Fatalf("expected text %q, got %q", wantText, gotText)
+	}
+
+	if !reflect.DeepEqual(gotKeyboard, plantsMenuKeyboard()) {
+		t.Fatalf("expected plants menu keyboard, got %#v", gotKeyboard)
+	}
+
+	if listPlantsCalled {
+		t.Fatal("ListPlants should not be called when EnsureUser fails")
+	}
+}
+
 func TestHandleAddPlantValidName(t *testing.T) {
 	var gotChatID int64
 	var gotText string

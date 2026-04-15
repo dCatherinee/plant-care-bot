@@ -110,6 +110,7 @@ func (b *Bot) registerHandlers() {
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonHelp, bot.MatchTypeExact, b.handleHelp)
 
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonAddPlant, bot.MatchTypeExact, b.handleAddPlant)
+	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonListPlants, bot.MatchTypeExact, b.handleListPlants)
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonBackToMenu, bot.MatchTypeExact, b.handleBackToMenu)
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonCancel, bot.MatchTypeExact, b.handleCancel)
 

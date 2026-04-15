@@ -10,6 +10,7 @@ const (
 	buttonHelp      = "Помощь"
 
 	buttonAddPlant   = "Добавить растение"
+	buttonListPlants = "Список растений"
 	buttonBackToMenu = "Меню"
 	buttonCancel     = "Отмена"
 )
@@ -39,6 +40,7 @@ func plantsMenuKeyboard() models.ReplyKeyboardMarkup {
 		Keyboard: [][]models.KeyboardButton{
 			{
 				{Text: buttonAddPlant},
+				{Text: buttonListPlants},
 			},
 			{
 				{Text: buttonBackToMenu},

@@ -85,6 +85,58 @@ func (b *Bot) handleAddPlant(ctx context.Context, _ *bot.Bot, update *models.Upd
 	}
 }
 
+func (b *Bot) replyWithError(ctx context.Context, chatID int64, userErr error, keyboard models.ReplyKeyboardMarkup, logMessage string) {
+	err := b.sendTextWithKeyboard(
+		ctx,
+		chatID,
+		userMessageFromError(userErr),
+		keyboard,
+	)
+	if err != nil {
+		b.log.Error(logMessage, "err", err)
+	}
+}
+
+func (b *Bot) ensureTelegramUser(ctx context.Context, chatID, telegramUserID int64, keyboard models.ReplyKeyboardMarkup) (domain.User, bool) {
+	user, err := b.users.EnsureUser(ctx, telegramUserID)
+	if err != nil {
+		b.replyWithError(ctx, chatID, err, keyboard, "send ensure user error")
+		return domain.User{}, false
+	}
+
+	return user, true
+}
+
+func (b *Bot) handleListPlants(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	if update == nil || update.Message == nil || update.Message.From == nil {
+		return
+	}
+
+	chatID := update.Message.Chat.ID
+	telegramUserID := update.Message.From.ID
+
+	user, ok := b.ensureTelegramUser(ctx, chatID, telegramUserID, plantsMenuKeyboard())
+	if !ok {
+		return
+	}
+
+	plants, err := b.plants.ListPlants(ctx, user.ID)
+	if err != nil {
+		b.replyWithError(ctx, chatID, err, plantsMenuKeyboard(), "send list plants error")
+		return
+	}
+
+	err = b.sendTextWithKeyboard(
+		ctx,
+		chatID,
+		formatPlantList(plants),
+		plantsMenuKeyboard(),
+	)
+	if err != nil {
+		b.log.Error("send plants list", "err", err)
+	}
+}
+
 func (b *Bot) handleTextByState(ctx context.Context, _ *bot.Bot, update *models.Update) {
 	if update == nil || update.Message == nil || update.Message.From == nil {
 		return
@@ -125,43 +177,18 @@ func validatePlantName(name string) error {
 func (b *Bot) handlePlantNameInput(ctx context.Context, chatID, userID int64, text string) {
 	err := validatePlantName(text)
 	if err != nil {
-		err := b.sendTextWithKeyboard(
-			ctx,
-			chatID,
-			userMessageFromError(err),
-			cancelKeyboard(),
-		)
-		if err != nil {
-			b.log.Error("send empty plant name warning", "err", err)
-		}
+		b.replyWithError(ctx, chatID, err, cancelKeyboard(), "send empty plant name warning")
 		return
 	}
 
-	user, err := b.users.EnsureUser(ctx, userID)
-	if err != nil {
-		err := b.sendTextWithKeyboard(
-			ctx,
-			chatID,
-			userMessageFromError(err),
-			cancelKeyboard(),
-		)
-		if err != nil {
-			b.log.Error("send ensure user error", "err", err)
-		}
+	user, ok := b.ensureTelegramUser(ctx, chatID, userID, cancelKeyboard())
+	if !ok {
 		return
 	}
 
 	plant, err := b.plants.AddPlant(ctx, user.ID, text)
 	if err != nil {
-		err := b.sendTextWithKeyboard(
-			ctx,
-			chatID,
-			userMessageFromError(err),
-			cancelKeyboard(),
-		)
-		if err != nil {
-			b.log.Error("send add plant error", "err", err)
-		}
+		b.replyWithError(ctx, chatID, err, cancelKeyboard(), "send add plant error")
 		return
 	}
 
