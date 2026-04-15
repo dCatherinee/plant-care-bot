@@ -103,3 +103,9 @@ func deleteConfirmInlineKeyboard(plantID int64) models.InlineKeyboardMarkup {
 		},
 	}
 }
+
+func emptyInlineKeyboard() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{},
+	}
+}

@@ -52,7 +52,6 @@ func New(token string, logger *slog.Logger, plants PlantUsecase, users UserUseca
 	tgBot.sendTextWithKeyboardFn = tgBot.sendTextWithKeyboardMessage
 	tgBot.sendTextWithInlineKeyboardFn = tgBot.sendTextWithInlineKeyboardMessage
 	tgBot.editMessageTextWithInlineKeyboardFn = tgBot.editMessageTextWithInlineKeyboardMessage
-	tgBot.answerCallbackQueryFn = tgBot.answerCallbackQuery
 
 	return tgBot, nil
 }

@@ -103,7 +103,7 @@ func (b *Bot) replyWithCallbackError(ctx context.Context, chatID int64, messageI
 		chatID,
 		messageID,
 		userMessageFromError(userErr),
-		models.InlineKeyboardMarkup{},
+		emptyInlineKeyboard(),
 	)
 	if err != nil {
 		b.log.Error(logMessage, "err", err)
@@ -344,7 +344,7 @@ func (b *Bot) handleDeleteConfirmCallback(ctx context.Context, _ *bot.Bot, updat
 			chatID,
 			messageID,
 			"Не удалось продолжить удаление. Попробуй заново.",
-			models.InlineKeyboardMarkup{},
+			emptyInlineKeyboard(),
 		)
 		if err != nil {
 			b.log.Error("send missing pending delete warning", "err", err)
@@ -366,7 +366,7 @@ func (b *Bot) handleDeleteConfirmCallback(ctx context.Context, _ *bot.Bot, updat
 		chatID,
 		messageID,
 		fmt.Sprintf("Растение \"%s\" удалено.", pending.plantName),
-		models.InlineKeyboardMarkup{},
+		emptyInlineKeyboard(),
 	)
 	if err != nil {
 		b.log.Error("send delete plant confirmation", "err", err)
@@ -393,7 +393,7 @@ func (b *Bot) handleDeleteCancelCallback(ctx context.Context, _ *bot.Bot, update
 		chatID,
 		messageID,
 		"Удаление отменено.",
-		models.InlineKeyboardMarkup{},
+		emptyInlineKeyboard(),
 	)
 	if err != nil {
 		b.log.Error("send delete cancel confirmation", "err", err)
