@@ -13,3 +13,7 @@ type PlantUsecase interface {
 	UpdatePlantName(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error)
 	DeletePlant(ctx context.Context, userID int64, plantID int64) error
 }
+
+type UserUsecase interface {
+	EnsureUser(ctx context.Context, telegramUserID int64) (domain.User, error)
+}

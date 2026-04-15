@@ -14,12 +14,13 @@ type Bot struct {
 	api                    *bot.Bot
 	log                    *slog.Logger
 	plants                 PlantUsecase
+	users                  UserUsecase
 	states                 *StateStore
 	sendTextFn             func(ctx context.Context, chatID int64, text string) error
 	sendTextWithKeyboardFn func(ctx context.Context, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) error
 }
 
-func New(token string, logger *slog.Logger, plants PlantUsecase) (*Bot, error) {
+func New(token string, logger *slog.Logger, plants PlantUsecase, users UserUsecase) (*Bot, error) {
 	if token == "" {
 		return nil, errors.New("telegram token is empty")
 	}
@@ -39,6 +40,7 @@ func New(token string, logger *slog.Logger, plants PlantUsecase) (*Bot, error) {
 		api:    b,
 		log:    logger,
 		plants: plants,
+		users:  users,
 		states: NewStateStore(),
 	}
 	tgBot.sendTextFn = tgBot.sendTextMessage
