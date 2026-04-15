@@ -5,8 +5,9 @@ import "sync"
 type State string
 
 const (
-	StateIdle             State = "idle"
-	StateWaitingPlantName State = "waiting_plant_name"
+	StateIdle                 State = "idle"
+	StateWaitingPlantName     State = "waiting_plant_name"
+	StateWaitingDeleteConfirm State = "waiting_delete_confirm"
 )
 
 type StateStore struct {
