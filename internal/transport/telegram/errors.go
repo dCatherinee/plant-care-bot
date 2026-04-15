@@ -7,17 +7,31 @@ import (
 )
 
 func userMessageFromError(err error) string {
-	switch {
-	case errors.Is(err, domain.ErrPlantNameEmpty):
-		return "Имя растения не должно быть пустым."
+	var validationErr domain.ValidationError
 
-	case errors.Is(err, domain.ErrInvalidPlantName):
-		return "Имя растения выглядит некорректно. Попробуй короче и без лишних символов."
+	switch {
+	case errors.As(err, &validationErr):
+		return userMessageFromValidationError(validationErr)
 
 	case errors.Is(err, domain.ErrPlantAlreadyExists):
 		return "Растение с таким именем уже есть."
 
 	default:
 		return "Что-то пошло не так. Попробуй ещё раз позже."
+	}
+}
+
+func userMessageFromValidationError(err domain.ValidationError) string {
+	switch err.Field {
+	case "name":
+		if err.Problem == "is empty" {
+			return "Имя растения не должно быть пустым."
+		}
+
+		return "Имя растения выглядит некорректно. Попробуй короче и без лишних символов."
+	case "telegramUserID":
+		return "Не удалось определить пользователя. Попробуй ещё раз позже."
+	default:
+		return "Проверь введённые данные и попробуй ещё раз."
 	}
 }

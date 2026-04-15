@@ -15,13 +15,27 @@ func TestUserMessageFromError(t *testing.T) {
 	}{
 		{
 			name: "empty plant name",
-			err:  domain.ErrPlantNameEmpty,
+			err: domain.ValidationError{
+				Field:   "name",
+				Problem: "is empty",
+			},
 			want: "Имя растения не должно быть пустым.",
 		},
 		{
 			name: "invalid plant name",
-			err:  domain.ErrInvalidPlantName,
+			err: domain.ValidationError{
+				Field:   "name",
+				Problem: "has invalid format",
+			},
 			want: "Имя растения выглядит некорректно. Попробуй короче и без лишних символов.",
+		},
+		{
+			name: "invalid telegram user id",
+			err: domain.ValidationError{
+				Field:   "telegramUserID",
+				Problem: "must be positive",
+			},
+			want: "Не удалось определить пользователя. Попробуй ещё раз позже.",
 		},
 		{
 			name: "plant already exists",

@@ -106,11 +106,17 @@ func validatePlantName(name string) error {
 	name = strings.TrimSpace(name)
 
 	if name == "" {
-		return domain.ErrPlantNameEmpty
+		return domain.ValidationError{
+			Field:   "name",
+			Problem: "is empty",
+		}
 	}
 
 	if len([]rune(name)) > 50 {
-		return domain.ErrInvalidPlantName
+		return domain.ValidationError{
+			Field:   "name",
+			Problem: "too long",
+		}
 	}
 
 	return nil
