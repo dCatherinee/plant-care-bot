@@ -13,6 +13,7 @@ import (
 type Bot struct {
 	api                    *bot.Bot
 	log                    *slog.Logger
+	states                 *StateStore
 	sendTextFn             func(ctx context.Context, chatID int64, text string) error
 	sendTextWithKeyboardFn func(ctx context.Context, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) error
 }
@@ -34,8 +35,9 @@ func New(token string, logger *slog.Logger) (*Bot, error) {
 	}
 
 	tgBot := &Bot{
-		api: b,
-		log: logger,
+		api:    b,
+		log:    logger,
+		states: NewStateStore(),
 	}
 	tgBot.sendTextFn = tgBot.sendTextMessage
 	tgBot.sendTextWithKeyboardFn = tgBot.sendTextWithKeyboardMessage
@@ -102,4 +104,12 @@ func (b *Bot) registerHandlers() {
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonReminders, bot.MatchTypeExact, b.handleReminders)
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonSettings, bot.MatchTypeExact, b.handleSettings)
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonHelp, bot.MatchTypeExact, b.handleHelp)
+
+	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonAddPlant, bot.MatchTypeExact, b.handleAddPlant)
+	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonBackToMenu, bot.MatchTypeExact, b.handleBackToMenu)
+	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonCancel, bot.MatchTypeExact, b.handleCancel)
+
+	b.api.RegisterHandlerMatchFunc(func(update *models.Update) bool {
+		return update.Message != nil
+	}, b.handleTextByState)
 }
