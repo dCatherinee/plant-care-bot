@@ -474,7 +474,7 @@ func TestHandleDeletePlantSelectionAndConfirm(t *testing.T) {
 		t.Fatalf("expected delete confirm keyboard, got %#v", gotKeyboard)
 	}
 
-	pending, ok := b.pendingDeleteStore().Get(1001)
+	pending, ok := b.pendingDeleteStore().Get(1001, 55)
 	if !ok || pending.plantID != 1 {
 		t.Fatalf("expected pending delete for plant 1, got %+v, ok=%v", pending, ok)
 	}
@@ -507,7 +507,7 @@ func TestHandleDeleteCancelCallback(t *testing.T) {
 		},
 	}
 
-	b.pendingDeleteStore().Set(1001, pendingDelete{userID: 77, plantID: 1, plantName: "Monstera"})
+	b.pendingDeleteStore().Set(1001, 55, pendingDelete{userID: 77, plantID: 1, plantName: "Monstera"})
 	b.handleDeleteCancelCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-cancel", callbackDeleteCancel))
 
 	if gotText != "Удаление отменено." {
@@ -516,6 +516,68 @@ func TestHandleDeleteCancelCallback(t *testing.T) {
 
 	if len(gotKeyboard.InlineKeyboard) != 0 {
 		t.Fatalf("expected empty inline keyboard after cancel, got %#v", gotKeyboard)
+	}
+}
+
+func TestHandleDeleteConfirmCallbackUsesMessageScopedPendingDelete(t *testing.T) {
+	var gotText string
+
+	b := &Bot{
+		log:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		pendingDeletes: NewPendingDeleteStore(),
+		editMessageTextWithInlineKeyboardFn: func(_ context.Context, chatID int64, messageID int, text string, keyboard models.InlineKeyboardMarkup) error {
+			gotText = text
+			return nil
+		},
+		answerCallbackQueryFn: func(_ context.Context, callbackQueryID string) error {
+			return nil
+		},
+	}
+
+	b.pendingDeleteStore().Set(1001, 99, pendingDelete{userID: 77, plantID: 1, plantName: "Monstera"})
+
+	b.handleDeleteConfirmCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-2", callbackDeleteConfirmPrefix+"1"))
+
+	if gotText != "Не удалось продолжить удаление. Попробуй заново." {
+		t.Fatalf("expected missing pending delete text, got %q", gotText)
+	}
+}
+
+func TestHandleDeleteConfirmCallbackEditsMessageOnDeleteError(t *testing.T) {
+	var gotText string
+	var sendReplyCalled bool
+
+	b := &Bot{
+		log:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		pendingDeletes: NewPendingDeleteStore(),
+		plants: plantUsecaseStub{
+			deletePlantFn: func(ctx context.Context, userID int64, plantID int64) error {
+				return domain.ErrNotFound
+			},
+		},
+		editMessageTextWithInlineKeyboardFn: func(_ context.Context, chatID int64, messageID int, text string, keyboard models.InlineKeyboardMarkup) error {
+			gotText = text
+			return nil
+		},
+		sendTextWithKeyboardFn: func(_ context.Context, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) error {
+			sendReplyCalled = true
+			return nil
+		},
+		answerCallbackQueryFn: func(_ context.Context, callbackQueryID string) error {
+			return nil
+		},
+	}
+
+	b.pendingDeleteStore().Set(1001, 55, pendingDelete{userID: 77, plantID: 1, plantName: "Monstera"})
+
+	b.handleDeleteConfirmCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-2", callbackDeleteConfirmPrefix+"1"))
+
+	if gotText != "Растение не найдено." {
+		t.Fatalf("expected edited callback error text, got %q", gotText)
+	}
+
+	if sendReplyCalled {
+		t.Fatal("callback delete error should not send a new reply-keyboard message")
 	}
 }
 

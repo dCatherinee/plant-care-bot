@@ -97,6 +97,19 @@ func (b *Bot) replyWithError(ctx context.Context, chatID int64, userErr error, k
 	}
 }
 
+func (b *Bot) replyWithCallbackError(ctx context.Context, chatID int64, messageID int, userErr error, logMessage string) {
+	err := b.editMessageTextWithInlineKeyboard(
+		ctx,
+		chatID,
+		messageID,
+		userMessageFromError(userErr),
+		models.InlineKeyboardMarkup{},
+	)
+	if err != nil {
+		b.log.Error(logMessage, "err", err)
+	}
+}
+
 func (b *Bot) pendingDeleteStore() *PendingDeleteStore {
 	if b.pendingDeletes == nil {
 		b.pendingDeletes = NewPendingDeleteStore()
@@ -172,7 +185,7 @@ func (b *Bot) handleDeletePlant(ctx context.Context, _ *bot.Bot, update *models.
 		return
 	}
 
-	b.pendingDeleteStore().Clear(telegramUserID)
+	b.pendingDeleteStore().ClearAllForUser(telegramUserID)
 	inlineButtons := make([]models.InlineKeyboardButton, 0, len(plants))
 	for _, plant := range plants {
 		inlineButtons = append(inlineButtons, models.InlineKeyboardButton{
@@ -284,11 +297,11 @@ func (b *Bot) handleDeleteSelectCallback(ctx context.Context, _ *bot.Bot, update
 
 	plant, err := b.plants.GetPlant(ctx, user.ID, plantID)
 	if err != nil {
-		b.replyWithError(ctx, chatID, err, plantsMenuKeyboard(), "send get plant for delete error")
+		b.replyWithCallbackError(ctx, chatID, messageID, err, "send get plant for delete error")
 		return
 	}
 
-	b.pendingDeleteStore().Set(telegramUserID, pendingDelete{
+	b.pendingDeleteStore().Set(telegramUserID, messageID, pendingDelete{
 		userID:    user.ID,
 		plantID:   plant.ID,
 		plantName: plant.Name,
@@ -324,7 +337,7 @@ func (b *Bot) handleDeleteConfirmCallback(ctx context.Context, _ *bot.Bot, updat
 		return
 	}
 
-	pending, ok := b.pendingDeleteStore().Get(telegramUserID)
+	pending, ok := b.pendingDeleteStore().Get(telegramUserID, messageID)
 	if !ok || pending.plantID != plantID {
 		err := b.editMessageTextWithInlineKeyboard(
 			ctx,
@@ -341,12 +354,12 @@ func (b *Bot) handleDeleteConfirmCallback(ctx context.Context, _ *bot.Bot, updat
 
 	err := b.plants.DeletePlant(ctx, pending.userID, pending.plantID)
 	if err != nil {
-		b.pendingDeleteStore().Clear(telegramUserID)
-		b.replyWithError(ctx, chatID, err, plantsMenuKeyboard(), "send delete plant error")
+		b.pendingDeleteStore().Clear(telegramUserID, messageID)
+		b.replyWithCallbackError(ctx, chatID, messageID, err, "send delete plant error")
 		return
 	}
 
-	b.pendingDeleteStore().Clear(telegramUserID)
+	b.pendingDeleteStore().Clear(telegramUserID, messageID)
 
 	err = b.editMessageTextWithInlineKeyboard(
 		ctx,
@@ -373,7 +386,7 @@ func (b *Bot) handleDeleteCancelCallback(ctx context.Context, _ *bot.Bot, update
 	messageID := update.CallbackQuery.Message.Message.ID
 	telegramUserID := update.CallbackQuery.From.ID
 
-	b.pendingDeleteStore().Clear(telegramUserID)
+	b.pendingDeleteStore().Clear(telegramUserID, messageID)
 
 	err := b.editMessageTextWithInlineKeyboard(
 		ctx,
@@ -395,7 +408,7 @@ func (b *Bot) handleCancel(ctx context.Context, _ *bot.Bot, update *models.Updat
 	userID := update.Message.From.ID
 	chatID := update.Message.Chat.ID
 
-	b.pendingDeleteStore().Clear(userID)
+	b.pendingDeleteStore().ClearAllForUser(userID)
 	b.states.Clear(userID)
 
 	err := b.sendTextWithKeyboard(
@@ -417,7 +430,7 @@ func (b *Bot) handleBackToMenu(ctx context.Context, _ *bot.Bot, update *models.U
 	userID := update.Message.From.ID
 	chatID := update.Message.Chat.ID
 
-	b.pendingDeleteStore().Clear(userID)
+	b.pendingDeleteStore().ClearAllForUser(userID)
 	b.states.Clear(userID)
 
 	err := b.sendTextWithKeyboard(

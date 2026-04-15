@@ -8,35 +8,51 @@ type pendingDelete struct {
 	plantName string
 }
 
+type pendingDeleteKey struct {
+	telegramUserID int64
+	messageID      int
+}
+
 type PendingDeleteStore struct {
 	mu    sync.RWMutex
-	items map[int64]pendingDelete
+	items map[pendingDeleteKey]pendingDelete
 }
 
 func NewPendingDeleteStore() *PendingDeleteStore {
 	return &PendingDeleteStore{
-		items: make(map[int64]pendingDelete),
+		items: make(map[pendingDeleteKey]pendingDelete),
 	}
 }
 
-func (s *PendingDeleteStore) Set(telegramUserID int64, value pendingDelete) {
+func (s *PendingDeleteStore) Set(telegramUserID int64, messageID int, value pendingDelete) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.items[telegramUserID] = value
+	s.items[pendingDeleteKey{telegramUserID: telegramUserID, messageID: messageID}] = value
 }
 
-func (s *PendingDeleteStore) Get(telegramUserID int64) (pendingDelete, bool) {
+func (s *PendingDeleteStore) Get(telegramUserID int64, messageID int) (pendingDelete, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	value, ok := s.items[telegramUserID]
+	value, ok := s.items[pendingDeleteKey{telegramUserID: telegramUserID, messageID: messageID}]
 	return value, ok
 }
 
-func (s *PendingDeleteStore) Clear(telegramUserID int64) {
+func (s *PendingDeleteStore) Clear(telegramUserID int64, messageID int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	delete(s.items, telegramUserID)
+	delete(s.items, pendingDeleteKey{telegramUserID: telegramUserID, messageID: messageID})
+}
+
+func (s *PendingDeleteStore) ClearAllForUser(telegramUserID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for key := range s.items {
+		if key.telegramUserID == telegramUserID {
+			delete(s.items, key)
+		}
+	}
 }
