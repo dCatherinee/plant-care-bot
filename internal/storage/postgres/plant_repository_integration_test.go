@@ -195,6 +195,26 @@ func TestPlantRepositoryDeletePlant_Integration(t *testing.T) {
 			t.Fatalf("expected ErrNotFound, got %v", err)
 		}
 	})
+
+	t.Run("wrong_user", func(t *testing.T) {
+		db := newTestDB(t)
+		cleanupTables(t, db)
+
+		ownerUserID := createTestUser(t, 2006)
+		otherUserID := createTestUser(t, 2007)
+		plantID := createTestPlant(t, ownerUserID, "Monstera", time.Date(2026, time.March, 25, 16, 0, 0, 0, time.UTC))
+		repo := NewPlantRepository(db)
+		ctx := context.Background()
+
+		err := repo.DeletePlant(ctx, otherUserID, plantID)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
 }
 
 func TestPlantRepositoryGetPlantByID_Integration(t *testing.T) {

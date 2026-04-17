@@ -11,13 +11,17 @@ const Version = "0.0.1"
 
 type App struct {
 	PlantService *usecase.PlantService
+	UserService  *usecase.UserService
 }
 
 func New(db *sql.DB) *App {
 	plantRepo := postgres.NewPlantRepository(db)
+	userRepo := postgres.NewUserRepository(db)
 	plantService := usecase.NewPlantService(plantRepo)
+	userService := usecase.NewUserService(userRepo)
 
 	return &App{
 		PlantService: plantService,
+		UserService:  userService,
 	}
 }

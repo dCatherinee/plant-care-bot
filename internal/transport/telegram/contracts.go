@@ -1,4 +1,4 @@
-package handler
+package telegram
 
 import (
 	"context"
@@ -12,4 +12,8 @@ type PlantUsecase interface {
 	GetPlant(ctx context.Context, userID int64, plantID int64) (domain.Plant, error)
 	UpdatePlantName(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error)
 	DeletePlant(ctx context.Context, userID int64, plantID int64) error
+}
+
+type UserUsecase interface {
+	EnsureUser(ctx context.Context, telegramUserID int64) (domain.User, error)
 }
