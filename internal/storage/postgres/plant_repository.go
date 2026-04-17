@@ -24,6 +24,9 @@ func (r *PlantRepository) CreatePlant(ctx context.Context, plant domain.Plant) (
 		returning id
 	`
 
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
+
 	var id int64
 	if err := r.db.QueryRowContext(ctx, query, plant.UserID, plant.Name, plant.CreatedAt).Scan(&id); err != nil {
 		return 0, fmt.Errorf("create plant: %w", err)
@@ -39,6 +42,9 @@ func (r *PlantRepository) ListPlantsByUser(ctx context.Context, userID int64) ([
 		where user_id = $1
 		order by id
 	`
+
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
 
 	rows, err := r.db.QueryContext(ctx, query, userID)
 	if err != nil {
@@ -69,6 +75,9 @@ func (r *PlantRepository) DeletePlant(ctx context.Context, userID int64, plantID
 		where id = $1 and user_id = $2
 	`
 
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
+
 	result, err := r.db.ExecContext(ctx, query, plantID, userID)
 	if err != nil {
 		return fmt.Errorf("delete plant: %w", err)
@@ -95,6 +104,9 @@ func (r *PlantRepository) GetPlantByID(ctx context.Context, userID int64, plantI
 		plant domain.Plant
 	)
 
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
+
 	err := r.db.QueryRowContext(ctx, query, plantID, userID).Scan(&plant.ID, &plant.UserID, &plant.Name, &plant.CreatedAt)
 
 	if err != nil {
@@ -117,6 +129,9 @@ func (r *PlantRepository) UpdatePlantName(ctx context.Context, userID int64, pla
 		select id, user_id, name, created_at from plants
 		where id = $1 and user_id = $2
 	`
+
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
 
 	result, err := r.db.ExecContext(ctx, queryUpdate, name, plantID, userID)
 	if err != nil {

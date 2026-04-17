@@ -25,6 +25,9 @@ func (r *UserRepository) EnsureUser(ctx context.Context, telegramUserID int64) (
 		returning id, telegram_user_id, created_at
 	`
 
+	ctx, cancel := withTimeout(ctx)
+	defer cancel()
+
 	var user domain.User
 	err := r.db.QueryRowContext(ctx, query, telegramUserID).Scan(
 		&user.ID,

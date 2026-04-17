@@ -12,6 +12,11 @@ import (
 )
 
 const pingTimeout = 5 * time.Second
+const queryTimeout = 5 * time.Second
+
+func withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, queryTimeout)
+}
 
 func open(cfg config.Config) (*sql.DB, error) {
 	dsn := fmt.Sprintf(

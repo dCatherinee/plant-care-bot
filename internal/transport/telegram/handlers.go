@@ -218,7 +218,10 @@ func (b *Bot) handleTextByState(ctx context.Context, _ *bot.Bot, update *models.
 	case StateWaitingPlantName:
 		b.handlePlantNameInput(ctx, chatID, userID, text)
 	default:
-		b.sendTextMessage(ctx, chatID, "Неизвестная команда")
+		err := b.sendTextMessage(ctx, chatID, "Неизвестная команда")
+		if err != nil {
+			b.log.Error("send unknown command response", "err", err)
+		}
 	}
 }
 
