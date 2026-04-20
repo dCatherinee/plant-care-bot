@@ -40,7 +40,106 @@ func (b *Bot) handlePlants(ctx context.Context, _ *bot.Bot, update *models.Updat
 }
 
 func (b *Bot) handleCare(ctx context.Context, _ *bot.Bot, update *models.Update) {
-	b.replyStub(ctx, update, `Раздел "Уход" пока в разработке 💧`)
+	if update == nil || update.Message == nil {
+		return
+	}
+
+	err := b.sendTextWithKeyboard(
+		ctx,
+		update.Message.Chat.ID,
+		"Раздел ухода 💧\n\nВыбери действие.",
+		careMenuKeyboard(),
+	)
+	if err != nil {
+		b.log.Error("send care menu", "err", err)
+	}
+}
+
+func (b *Bot) handleCareMark(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	if update == nil || update.Message == nil || update.Message.From == nil {
+		return
+	}
+
+	chatID := update.Message.Chat.ID
+	telegramUserID := update.Message.From.ID
+
+	user, ok := b.ensureTelegramUser(ctx, chatID, telegramUserID, careMenuKeyboard())
+	if !ok {
+		return
+	}
+
+	plants, err := b.plants.ListPlants(ctx, user.ID)
+	if err != nil {
+		b.replyWithError(ctx, chatID, err, careMenuKeyboard(), "send care plants list error")
+		return
+	}
+
+	if len(plants) == 0 {
+		err := b.sendTextWithKeyboard(ctx, chatID, "Список растений пуст.", careMenuKeyboard())
+		if err != nil {
+			b.log.Error("send empty plants list for care", "err", err)
+		}
+		return
+	}
+
+	err = b.sendTextWithInlineKeyboard(
+		ctx,
+		chatID,
+		formatCarePlantPrompt(),
+		carePlantsInlineKeyboard(carePlantButtons(plants)),
+	)
+	if err != nil {
+		b.log.Error("send care plant prompt", "err", err)
+	}
+}
+
+func (b *Bot) handleWaterLog(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	b.handleCareJournal(ctx, update, domain.CareKindWater)
+}
+
+func (b *Bot) handleFertilizeLog(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	b.handleCareJournal(ctx, update, domain.CareKindFertilize)
+}
+
+func (b *Bot) handleCareJournal(ctx context.Context, update *models.Update, careType domain.CareKind) {
+	if update == nil || update.Message == nil || update.Message.From == nil {
+		return
+	}
+
+	chatID := update.Message.Chat.ID
+	telegramUserID := update.Message.From.ID
+
+	user, ok := b.ensureTelegramUser(ctx, chatID, telegramUserID, careMenuKeyboard())
+	if !ok {
+		return
+	}
+
+	plants, err := b.plants.ListPlants(ctx, user.ID)
+	if err != nil {
+		b.replyWithError(ctx, chatID, err, careMenuKeyboard(), "send care journal plants error")
+		return
+	}
+
+	plantNames := make(map[int64]string, len(plants))
+	for _, plant := range plants {
+		plantNames[plant.ID] = plant.Name
+	}
+
+	careEvents, err := b.care.ListRecentCareEventsByType(ctx, user.ID, careType, 10)
+	if err != nil {
+		b.replyWithError(ctx, chatID, err, careMenuKeyboard(), "send care journal error")
+		return
+	}
+
+	err = b.sendTextWithKeyboard(
+		ctx,
+		chatID,
+		formatCareJournal(careType, careEvents, plantNames),
+		careMenuKeyboard(),
+	)
+	if err != nil {
+		b.log.Error("send care journal", "err", err)
+	}
 }
 
 func (b *Bot) handleReminders(ctx context.Context, _ *bot.Bot, update *models.Update) {
@@ -400,6 +499,157 @@ func (b *Bot) handleDeleteCancelCallback(ctx context.Context, _ *bot.Bot, update
 	)
 	if err != nil {
 		b.log.Error("send delete cancel confirmation", "err", err)
+	}
+}
+
+func (b *Bot) handleCareSelectCallback(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	if update == nil || update.CallbackQuery == nil || update.CallbackQuery.Message.Message == nil {
+		return
+	}
+
+	if err := b.answerCallbackQuery(ctx, update.CallbackQuery.ID); err != nil {
+		b.log.Error("answer care select callback", "err", err)
+	}
+
+	chatID := update.CallbackQuery.Message.Message.Chat.ID
+	messageID := update.CallbackQuery.Message.Message.ID
+	telegramUserID := update.CallbackQuery.From.ID
+	plantID, ok := parseCallbackPlantID(update.CallbackQuery.Data, callbackCareSelectPrefix)
+	if !ok {
+		return
+	}
+
+	user, ok := b.ensureTelegramUser(ctx, chatID, telegramUserID, careMenuKeyboard())
+	if !ok {
+		return
+	}
+
+	plant, err := b.plants.GetPlant(ctx, user.ID, plantID)
+	if err != nil {
+		b.replyWithCallbackError(ctx, chatID, messageID, err, "send get plant for care error")
+		return
+	}
+
+	err = b.editMessageTextWithInlineKeyboard(
+		ctx,
+		chatID,
+		messageID,
+		formatCareActionsPrompt(plant.Name),
+		careActionsInlineKeyboard(plant.ID),
+	)
+	if err != nil {
+		b.log.Error("send care actions prompt", "err", err)
+	}
+}
+
+func (b *Bot) handleCareWaterCallback(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	b.handleCareMarkCallback(ctx, update, callbackCareWaterPrefix, domain.CareKindWater)
+}
+
+func (b *Bot) handleCareFertilizeCallback(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	b.handleCareMarkCallback(ctx, update, callbackCareFertilizePrefix, domain.CareKindFertilize)
+}
+
+func (b *Bot) handleCareMarkCallback(ctx context.Context, update *models.Update, prefix string, careType domain.CareKind) {
+	if update == nil || update.CallbackQuery == nil || update.CallbackQuery.Message.Message == nil {
+		return
+	}
+
+	if err := b.answerCallbackQuery(ctx, update.CallbackQuery.ID); err != nil {
+		b.log.Error("answer care action callback", "err", err)
+	}
+
+	chatID := update.CallbackQuery.Message.Message.Chat.ID
+	messageID := update.CallbackQuery.Message.Message.ID
+	telegramUserID := update.CallbackQuery.From.ID
+	plantID, ok := parseCallbackPlantID(update.CallbackQuery.Data, prefix)
+	if !ok {
+		return
+	}
+
+	user, ok := b.ensureTelegramUser(ctx, chatID, telegramUserID, careMenuKeyboard())
+	if !ok {
+		return
+	}
+
+	plant, err := b.plants.GetPlant(ctx, user.ID, plantID)
+	if err != nil {
+		b.replyWithCallbackError(ctx, chatID, messageID, err, "send get plant for care action error")
+		return
+	}
+
+	switch careType {
+	case domain.CareKindWater:
+		_, err = b.care.MarkWater(ctx, user.ID, plant.ID)
+	case domain.CareKindFertilize:
+		_, err = b.care.MarkFertilize(ctx, user.ID, plant.ID)
+	default:
+		err = domain.ErrInvalidArgument
+	}
+	if err != nil {
+		b.replyWithCallbackError(ctx, chatID, messageID, err, "send care action error")
+		return
+	}
+
+	err = b.editMessageTextWithInlineKeyboard(
+		ctx,
+		chatID,
+		messageID,
+		formatCareMarkedMessage(plant.Name, careType),
+		careActionsInlineKeyboard(plant.ID),
+	)
+	if err != nil {
+		b.log.Error("send care action confirmation", "err", err)
+	}
+}
+
+func (b *Bot) handleCareBackCallback(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	if update == nil || update.CallbackQuery == nil || update.CallbackQuery.Message.Message == nil {
+		return
+	}
+
+	if err := b.answerCallbackQuery(ctx, update.CallbackQuery.ID); err != nil {
+		b.log.Error("answer care back callback", "err", err)
+	}
+
+	chatID := update.CallbackQuery.Message.Message.Chat.ID
+	messageID := update.CallbackQuery.Message.Message.ID
+	telegramUserID := update.CallbackQuery.From.ID
+
+	user, ok := b.ensureTelegramUser(ctx, chatID, telegramUserID, careMenuKeyboard())
+	if !ok {
+		return
+	}
+
+	plants, err := b.plants.ListPlants(ctx, user.ID)
+	if err != nil {
+		b.replyWithCallbackError(ctx, chatID, messageID, err, "send care plants list on back error")
+		return
+	}
+
+	if len(plants) == 0 {
+		err := b.editMessageTextWithInlineKeyboard(
+			ctx,
+			chatID,
+			messageID,
+			"Список растений пуст.",
+			emptyInlineKeyboard(),
+		)
+		if err != nil {
+			b.log.Error("send empty plants list on care back", "err", err)
+		}
+		return
+	}
+
+	err = b.editMessageTextWithInlineKeyboard(
+		ctx,
+		chatID,
+		messageID,
+		formatCarePlantPrompt(),
+		carePlantsInlineKeyboard(carePlantButtons(plants)),
+	)
+	if err != nil {
+		b.log.Error("send care plants list on back", "err", err)
 	}
 }
 

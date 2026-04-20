@@ -104,6 +104,55 @@ func TestPlantsMenuKeyboard(t *testing.T) {
 	}
 }
 
+func TestCareMenuKeyboard(t *testing.T) {
+	keyboard := careMenuKeyboard()
+
+	if !keyboard.ResizeKeyboard {
+		t.Fatal("expected keyboard to use resize mode")
+	}
+
+	if len(keyboard.Keyboard) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(keyboard.Keyboard))
+	}
+
+	tests := []struct {
+		name string
+		row  int
+		want []string
+	}{
+		{
+			name: "first row",
+			row:  0,
+			want: []string{buttonCareMark},
+		},
+		{
+			name: "second row",
+			row:  1,
+			want: []string{buttonWaterLog, buttonFertilizeLog},
+		},
+		{
+			name: "third row",
+			row:  2,
+			want: []string{buttonBackToMenu},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row := keyboard.Keyboard[tt.row]
+			if len(row) != len(tt.want) {
+				t.Fatalf("expected %d buttons, got %d", len(tt.want), len(row))
+			}
+
+			for i, want := range tt.want {
+				if row[i].Text != want {
+					t.Fatalf("expected button %d text %q, got %q", i, want, row[i].Text)
+				}
+			}
+		})
+	}
+}
+
 func TestDeletePlantsInlineKeyboard(t *testing.T) {
 	keyboard := deletePlantsInlineKeyboard([]models.InlineKeyboardButton{
 		{Text: "Monstera", CallbackData: callbackDeleteSelectPrefix + "1"},
@@ -145,5 +194,49 @@ func TestDeleteConfirmInlineKeyboard(t *testing.T) {
 
 	if row[1].CallbackData != callbackDeleteCancel {
 		t.Fatalf("unexpected cancel callback: %#v", row[1])
+	}
+}
+
+func TestCarePlantsInlineKeyboard(t *testing.T) {
+	keyboard := carePlantsInlineKeyboard([]models.InlineKeyboardButton{
+		{Text: "Monstera", CallbackData: callbackCareSelectPrefix + "1"},
+		{Text: "Cactus", CallbackData: callbackCareSelectPrefix + "2"},
+	})
+
+	if len(keyboard.InlineKeyboard) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(keyboard.InlineKeyboard))
+	}
+
+	if keyboard.InlineKeyboard[0][0].CallbackData != callbackCareSelectPrefix+"1" {
+		t.Fatalf("unexpected first care callback: %#v", keyboard.InlineKeyboard[0][0])
+	}
+
+	if keyboard.InlineKeyboard[1][0].CallbackData != callbackCareSelectPrefix+"2" {
+		t.Fatalf("unexpected second care callback: %#v", keyboard.InlineKeyboard[1][0])
+	}
+}
+
+func TestCareActionsInlineKeyboard(t *testing.T) {
+	keyboard := careActionsInlineKeyboard(12)
+
+	if len(keyboard.InlineKeyboard) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(keyboard.InlineKeyboard))
+	}
+
+	firstRow := keyboard.InlineKeyboard[0]
+	if len(firstRow) != 2 {
+		t.Fatalf("expected 2 buttons in first row, got %d", len(firstRow))
+	}
+
+	if firstRow[0].CallbackData != callbackCareWaterPrefix+"12" {
+		t.Fatalf("unexpected water callback: %#v", firstRow[0])
+	}
+
+	if firstRow[1].CallbackData != callbackCareFertilizePrefix+"12" {
+		t.Fatalf("unexpected fertilize callback: %#v", firstRow[1])
+	}
+
+	if keyboard.InlineKeyboard[1][0].CallbackData != callbackCareBack {
+		t.Fatalf("unexpected care back callback: %#v", keyboard.InlineKeyboard[1][0])
 	}
 }

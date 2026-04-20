@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,36 @@ func (s userUsecaseStub) EnsureUser(ctx context.Context, telegramUserID int64) (
 	return domain.User{}, nil
 }
 
+type careUsecaseStub struct {
+	markWaterFn                  func(ctx context.Context, userID int64, plantID int64) (domain.CareEvent, error)
+	markFertilizeFn              func(ctx context.Context, userID int64, plantID int64) (domain.CareEvent, error)
+	listRecentCareEventsByTypeFn func(ctx context.Context, userID int64, eventType domain.CareKind, limit int) ([]domain.CareEvent, error)
+}
+
+func (s careUsecaseStub) MarkWater(ctx context.Context, userID int64, plantID int64) (domain.CareEvent, error) {
+	if s.markWaterFn != nil {
+		return s.markWaterFn(ctx, userID, plantID)
+	}
+
+	return domain.CareEvent{}, nil
+}
+
+func (s careUsecaseStub) MarkFertilize(ctx context.Context, userID int64, plantID int64) (domain.CareEvent, error) {
+	if s.markFertilizeFn != nil {
+		return s.markFertilizeFn(ctx, userID, plantID)
+	}
+
+	return domain.CareEvent{}, nil
+}
+
+func (s careUsecaseStub) ListRecentCareEventsByType(ctx context.Context, userID int64, eventType domain.CareKind, limit int) ([]domain.CareEvent, error) {
+	if s.listRecentCareEventsByTypeFn != nil {
+		return s.listRecentCareEventsByTypeFn(ctx, userID, eventType, limit)
+	}
+
+	return nil, nil
+}
+
 func TestHandleStartSendsWelcomeTextWithKeyboard(t *testing.T) {
 	var gotChatID int64
 	var gotText string
@@ -128,13 +159,6 @@ func TestStubHandlersSendExpectedText(t *testing.T) {
 		want    string
 	}{
 		{
-			name: "care",
-			handler: func(ctx context.Context, bt *Bot, update *models.Update) {
-				bt.handleCare(ctx, nil, update)
-			},
-			want: `Раздел "Уход" пока в разработке 💧`,
-		},
-		{
 			name: "reminders",
 			handler: func(ctx context.Context, bt *Bot, update *models.Update) {
 				bt.handleReminders(ctx, nil, update)
@@ -181,6 +205,145 @@ func TestStubHandlersSendExpectedText(t *testing.T) {
 				t.Fatalf("expected text %q, got %q", tt.want, gotText)
 			}
 		})
+	}
+}
+
+func TestHandleCareStartsFlow(t *testing.T) {
+	var gotChatID int64
+	var gotText string
+	var gotKeyboard models.ReplyKeyboardMarkup
+
+	b := &Bot{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sendTextWithKeyboardFn: func(_ context.Context, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) error {
+			gotChatID = chatID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+	}
+
+	b.handleCare(context.Background(), nil, testUpdateFromUser(42, 1001, buttonCare))
+
+	if gotChatID != 42 {
+		t.Fatalf("expected chat ID %d, got %d", 42, gotChatID)
+	}
+
+	wantText := "Раздел ухода 💧\n\nВыбери действие."
+	if gotText != wantText {
+		t.Fatalf("expected text %q, got %q", wantText, gotText)
+	}
+
+	if !reflect.DeepEqual(gotKeyboard, careMenuKeyboard()) {
+		t.Fatalf("expected care menu keyboard, got %#v", gotKeyboard)
+	}
+}
+
+func TestHandleCareMarkStartsInlineFlow(t *testing.T) {
+	var gotChatID int64
+	var gotText string
+	var gotKeyboard models.InlineKeyboardMarkup
+
+	b := &Bot{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				return domain.User{ID: 77, TelegramUserID: telegramUserID}, nil
+			},
+		},
+		plants: plantUsecaseStub{
+			listPlantsFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
+				return []domain.Plant{
+					{ID: 1, UserID: userID, Name: "Monstera"},
+					{ID: 2, UserID: userID, Name: "Cactus"},
+				}, nil
+			},
+		},
+		sendTextWithInlineKeyboardFn: func(_ context.Context, chatID int64, text string, keyboard models.InlineKeyboardMarkup) error {
+			gotChatID = chatID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+	}
+
+	b.handleCareMark(context.Background(), nil, testUpdateFromUser(42, 1001, buttonCareMark))
+
+	if gotChatID != 42 {
+		t.Fatalf("expected chat ID %d, got %d", 42, gotChatID)
+	}
+
+	if gotText != formatCarePlantPrompt() {
+		t.Fatalf("expected text %q, got %q", formatCarePlantPrompt(), gotText)
+	}
+
+	if gotKeyboard.InlineKeyboard[0][0].CallbackData != callbackCareSelectPrefix+"1" {
+		t.Fatalf("unexpected first care button: %#v", gotKeyboard.InlineKeyboard[0][0])
+	}
+}
+
+func TestHandleWaterLogShowsRecentEvents(t *testing.T) {
+	var gotChatID int64
+	var gotText string
+	var gotKeyboard models.ReplyKeyboardMarkup
+
+	eventTime := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
+
+	b := &Bot{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				return domain.User{ID: 77, TelegramUserID: telegramUserID}, nil
+			},
+		},
+		plants: plantUsecaseStub{
+			listPlantsFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
+				return []domain.Plant{
+					{ID: 1, UserID: userID, Name: "Monstera"},
+				}, nil
+			},
+		},
+		care: careUsecaseStub{
+			listRecentCareEventsByTypeFn: func(ctx context.Context, userID int64, eventType domain.CareKind, limit int) ([]domain.CareEvent, error) {
+				if userID != 77 {
+					t.Fatalf("expected user ID 77, got %d", userID)
+				}
+				if eventType != domain.CareKindWater {
+					t.Fatalf("expected water kind, got %q", eventType)
+				}
+				if limit != 10 {
+					t.Fatalf("expected limit 10, got %d", limit)
+				}
+
+				return []domain.CareEvent{
+					{ID: 1, PlantID: 1, Kind: domain.CareKindWater, OccurredAt: eventTime},
+				}, nil
+			},
+		},
+		sendTextWithKeyboardFn: func(_ context.Context, chatID int64, text string, keyboard models.ReplyKeyboardMarkup) error {
+			gotChatID = chatID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+	}
+
+	b.handleWaterLog(context.Background(), nil, testUpdateFromUser(42, 1001, buttonWaterLog))
+
+	if gotChatID != 42 {
+		t.Fatalf("expected chat ID %d, got %d", 42, gotChatID)
+	}
+
+	if !strings.Contains(gotText, "Журнал полива:") {
+		t.Fatalf("expected water log title, got %q", gotText)
+	}
+
+	if !strings.Contains(gotText, "Monstera") {
+		t.Fatalf("expected plant name in text, got %q", gotText)
+	}
+
+	if !reflect.DeepEqual(gotKeyboard, careMenuKeyboard()) {
+		t.Fatalf("expected care menu keyboard, got %#v", gotKeyboard)
 	}
 }
 
@@ -516,6 +679,92 @@ func TestHandleDeleteCancelCallback(t *testing.T) {
 
 	if len(gotKeyboard.InlineKeyboard) != 0 {
 		t.Fatalf("expected empty inline keyboard after cancel, got %#v", gotKeyboard)
+	}
+}
+
+func TestHandleCareSelectWaterAndBackCallbacks(t *testing.T) {
+	var gotEditChatID int64
+	var gotEditMessageID int
+	var gotText string
+	var gotKeyboard models.InlineKeyboardMarkup
+	var answeredCallbacks []string
+
+	b := &Bot{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		users: userUsecaseStub{
+			ensureUserFn: func(ctx context.Context, telegramUserID int64) (domain.User, error) {
+				return domain.User{ID: 77, TelegramUserID: telegramUserID}, nil
+			},
+		},
+		plants: plantUsecaseStub{
+			getPlantFn: func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
+				return domain.Plant{ID: plantID, UserID: userID, Name: "Monstera"}, nil
+			},
+			listPlantsFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
+				return []domain.Plant{
+					{ID: 1, UserID: userID, Name: "Monstera"},
+					{ID: 2, UserID: userID, Name: "Cactus"},
+				}, nil
+			},
+		},
+		care: careUsecaseStub{
+			markWaterFn: func(ctx context.Context, userID int64, plantID int64) (domain.CareEvent, error) {
+				if userID != 77 || plantID != 1 {
+					t.Fatalf("unexpected MarkWater params userID=%d plantID=%d", userID, plantID)
+				}
+
+				return domain.CareEvent{ID: 5, PlantID: plantID, Kind: domain.CareKindWater}, nil
+			},
+		},
+		editMessageTextWithInlineKeyboardFn: func(_ context.Context, chatID int64, messageID int, text string, keyboard models.InlineKeyboardMarkup) error {
+			gotEditChatID = chatID
+			gotEditMessageID = messageID
+			gotText = text
+			gotKeyboard = keyboard
+			return nil
+		},
+		answerCallbackQueryFn: func(_ context.Context, callbackQueryID string) error {
+			answeredCallbacks = append(answeredCallbacks, callbackQueryID)
+			return nil
+		},
+	}
+
+	b.handleCareSelectCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-care-select", callbackCareSelectPrefix+"1"))
+
+	if gotEditChatID != 42 || gotEditMessageID != 55 {
+		t.Fatalf("expected edited message 42/55, got %d/%d", gotEditChatID, gotEditMessageID)
+	}
+
+	if gotText != `Что отметить для "Monstera"?` {
+		t.Fatalf("expected care actions prompt, got %q", gotText)
+	}
+
+	if !reflect.DeepEqual(gotKeyboard, careActionsInlineKeyboard(1)) {
+		t.Fatalf("expected care action keyboard, got %#v", gotKeyboard)
+	}
+
+	b.handleCareWaterCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-care-water", callbackCareWaterPrefix+"1"))
+
+	if gotText != "Полив для Monstera отмечен." {
+		t.Fatalf("expected water confirmation, got %q", gotText)
+	}
+
+	if !reflect.DeepEqual(gotKeyboard, careActionsInlineKeyboard(1)) {
+		t.Fatalf("expected care action keyboard after water, got %#v", gotKeyboard)
+	}
+
+	b.handleCareBackCallback(context.Background(), nil, testDeleteCallbackUpdate(42, 1001, 55, "cb-care-back", callbackCareBack))
+
+	if gotText != formatCarePlantPrompt() {
+		t.Fatalf("expected care plants prompt after back, got %q", gotText)
+	}
+
+	if gotKeyboard.InlineKeyboard[0][0].CallbackData != callbackCareSelectPrefix+"1" {
+		t.Fatalf("unexpected first care button after back: %#v", gotKeyboard.InlineKeyboard[0][0])
+	}
+
+	if len(answeredCallbacks) != 3 {
+		t.Fatalf("expected 3 answered callbacks, got %d", len(answeredCallbacks))
 	}
 }
 

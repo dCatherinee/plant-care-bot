@@ -17,3 +17,9 @@ type PlantUsecase interface {
 type UserUsecase interface {
 	EnsureUser(ctx context.Context, telegramUserID int64) (domain.User, error)
 }
+
+type CareUsecase interface {
+	MarkWater(ctx context.Context, userID int64, plantID int64) (domain.CareEvent, error)
+	MarkFertilize(ctx context.Context, userID int64, plantID int64) (domain.CareEvent, error)
+	ListRecentCareEventsByType(ctx context.Context, userID int64, eventType domain.CareKind, limit int) ([]domain.CareEvent, error)
+}

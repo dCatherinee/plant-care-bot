@@ -10,18 +10,22 @@ import (
 const Version = "0.0.1"
 
 type App struct {
-	PlantService *usecase.PlantService
-	UserService  *usecase.UserService
+	PlantService     *usecase.PlantService
+	UserService      *usecase.UserService
+	CareEventService *usecase.CareEventService
 }
 
 func New(db *sql.DB) *App {
 	plantRepo := postgres.NewPlantRepository(db)
 	userRepo := postgres.NewUserRepository(db)
+	careEventRepo := postgres.NewCareEventRepository(db)
 	plantService := usecase.NewPlantService(plantRepo)
 	userService := usecase.NewUserService(userRepo)
+	careEventService := usecase.NewCareEventService(careEventRepo, plantRepo)
 
 	return &App{
-		PlantService: plantService,
-		UserService:  userService,
+		PlantService:     plantService,
+		UserService:      userService,
+		CareEventService: careEventService,
 	}
 }

@@ -9,15 +9,26 @@ const (
 	buttonSettings  = "Настройки"
 	buttonHelp      = "Помощь"
 
-	buttonAddPlant    = "Добавить растение"
-	buttonListPlants  = "Список растений"
-	buttonDeletePlant = "Удалить растение"
-	buttonBackToMenu  = "Меню"
-	buttonCancel      = "Отмена"
+	buttonAddPlant     = "Добавить растение"
+	buttonListPlants   = "Список растений"
+	buttonDeletePlant  = "Удалить растение"
+	buttonBackToMenu   = "Меню"
+	buttonCancel       = "Отмена"
+	buttonCareMark     = "Отметить уход"
+	buttonWaterLog     = "Журнал полива"
+	buttonFertilizeLog = "Журнал удобрений"
+
+	buttonMarkWater     = "Полил"
+	buttonMarkFertilize = "Удобрил"
+	buttonBackStep      = "Назад"
 
 	callbackDeleteSelectPrefix  = "delete:select:"
 	callbackDeleteConfirmPrefix = "delete:confirm:"
 	callbackDeleteCancel        = "delete:cancel"
+	callbackCareSelectPrefix    = "care:select:"
+	callbackCareWaterPrefix     = "care:water:"
+	callbackCareFertilizePrefix = "care:fertilize:"
+	callbackCareBack            = "care:back"
 )
 
 func mainMenuKeyboard() models.ReplyKeyboardMarkup {
@@ -69,6 +80,24 @@ func cancelKeyboard() models.ReplyKeyboardMarkup {
 	}
 }
 
+func careMenuKeyboard() models.ReplyKeyboardMarkup {
+	return models.ReplyKeyboardMarkup{
+		ResizeKeyboard: true,
+		Keyboard: [][]models.KeyboardButton{
+			{
+				{Text: buttonCareMark},
+			},
+			{
+				{Text: buttonWaterLog},
+				{Text: buttonFertilizeLog},
+			},
+			{
+				{Text: buttonBackToMenu},
+			},
+		},
+	}
+}
+
 func deletePlantsInlineKeyboard(plants []models.InlineKeyboardButton) models.InlineKeyboardMarkup {
 	rows := make([][]models.InlineKeyboardButton, 0, len(plants)+1)
 	for _, button := range plants {
@@ -98,6 +127,40 @@ func deleteConfirmInlineKeyboard(plantID int64) models.InlineKeyboardMarkup {
 				{
 					Text:         buttonCancel,
 					CallbackData: callbackDeleteCancel,
+				},
+			},
+		},
+	}
+}
+
+func carePlantsInlineKeyboard(plants []models.InlineKeyboardButton) models.InlineKeyboardMarkup {
+	rows := make([][]models.InlineKeyboardButton, 0, len(plants))
+	for _, button := range plants {
+		rows = append(rows, []models.InlineKeyboardButton{button})
+	}
+
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: rows,
+	}
+}
+
+func careActionsInlineKeyboard(plantID int64) models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{
+					Text:         buttonMarkWater,
+					CallbackData: callbackCareWaterPrefix + int64ToString(plantID),
+				},
+				{
+					Text:         buttonMarkFertilize,
+					CallbackData: callbackCareFertilizePrefix + int64ToString(plantID),
+				},
+			},
+			{
+				{
+					Text:         buttonBackStep,
+					CallbackData: callbackCareBack,
 				},
 			},
 		},
