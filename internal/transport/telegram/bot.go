@@ -15,6 +15,7 @@ type Bot struct {
 	log                                 *slog.Logger
 	plants                              PlantUsecase
 	users                               UserUsecase
+	care                                CareUsecase
 	states                              *StateStore
 	pendingDeletes                      *PendingDeleteStore
 	sendTextFn                          func(ctx context.Context, chatID int64, text string) error
@@ -24,7 +25,7 @@ type Bot struct {
 	answerCallbackQueryFn               func(ctx context.Context, callbackQueryID string) error
 }
 
-func New(token string, logger *slog.Logger, plants PlantUsecase, users UserUsecase) (*Bot, error) {
+func New(token string, logger *slog.Logger, plants PlantUsecase, users UserUsecase, care CareUsecase) (*Bot, error) {
 	if token == "" {
 		return nil, errors.New("telegram token is empty")
 	}
@@ -45,6 +46,7 @@ func New(token string, logger *slog.Logger, plants PlantUsecase, users UserUseca
 		log:            logger,
 		plants:         plants,
 		users:          users,
+		care:           care,
 		states:         NewStateStore(),
 		pendingDeletes: NewPendingDeleteStore(),
 	}
@@ -170,6 +172,9 @@ func (b *Bot) registerHandlers() {
 
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonPlants, bot.MatchTypeExact, b.handlePlants)
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonCare, bot.MatchTypeExact, b.handleCare)
+	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonCareMark, bot.MatchTypeExact, b.handleCareMark)
+	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonWaterLog, bot.MatchTypeExact, b.handleWaterLog)
+	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonFertilizeLog, bot.MatchTypeExact, b.handleFertilizeLog)
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonReminders, bot.MatchTypeExact, b.handleReminders)
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonSettings, bot.MatchTypeExact, b.handleSettings)
 	b.api.RegisterHandler(bot.HandlerTypeMessageText, buttonHelp, bot.MatchTypeExact, b.handleHelp)
@@ -182,6 +187,10 @@ func (b *Bot) registerHandlers() {
 	b.api.RegisterHandler(bot.HandlerTypeCallbackQueryData, callbackDeleteCancel, bot.MatchTypeExact, b.handleDeleteCancelCallback)
 	b.api.RegisterHandler(bot.HandlerTypeCallbackQueryData, callbackDeleteSelectPrefix, bot.MatchTypePrefix, b.handleDeleteSelectCallback)
 	b.api.RegisterHandler(bot.HandlerTypeCallbackQueryData, callbackDeleteConfirmPrefix, bot.MatchTypePrefix, b.handleDeleteConfirmCallback)
+	b.api.RegisterHandler(bot.HandlerTypeCallbackQueryData, callbackCareBack, bot.MatchTypeExact, b.handleCareBackCallback)
+	b.api.RegisterHandler(bot.HandlerTypeCallbackQueryData, callbackCareSelectPrefix, bot.MatchTypePrefix, b.handleCareSelectCallback)
+	b.api.RegisterHandler(bot.HandlerTypeCallbackQueryData, callbackCareWaterPrefix, bot.MatchTypePrefix, b.handleCareWaterCallback)
+	b.api.RegisterHandler(bot.HandlerTypeCallbackQueryData, callbackCareFertilizePrefix, bot.MatchTypePrefix, b.handleCareFertilizeCallback)
 
 	b.api.RegisterHandlerMatchFunc(func(update *models.Update) bool {
 		return update.Message != nil

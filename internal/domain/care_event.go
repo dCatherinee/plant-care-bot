@@ -46,3 +46,15 @@ func NewCareEvent(plantID int64, kind CareKind, occurredAt time.Time) (CareEvent
 		CreatedAt:  time.Now().UTC(),
 	}, nil
 }
+
+func MustCareEvent(id, plantID int64, kind CareKind, occurredAt time.Time, createdAt time.Time) CareEvent {
+	res, err := NewCareEvent(plantID, kind, occurredAt)
+	if err != nil {
+		panic(err)
+	}
+
+	res.ID = id
+	res.CreatedAt = createdAt
+
+	return res
+}

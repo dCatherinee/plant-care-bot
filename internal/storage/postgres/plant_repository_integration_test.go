@@ -40,7 +40,7 @@ func createTestPlant(t *testing.T, userID int64, name string, createdAt time.Tim
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	id, err := repo.CreatePlant(ctx, domain.Plant{
+	plant, err := repo.CreatePlant(ctx, domain.Plant{
 		UserID:    userID,
 		Name:      name,
 		CreatedAt: createdAt,
@@ -49,7 +49,7 @@ func createTestPlant(t *testing.T, userID int64, name string, createdAt time.Tim
 		t.Fatalf("create test plant: %v", err)
 	}
 
-	return id
+	return plant.ID
 }
 
 func TestPlantRepositoryCreatePlant_Integration(t *testing.T) {
@@ -67,13 +67,13 @@ func TestPlantRepositoryCreatePlant_Integration(t *testing.T) {
 		CreatedAt: createdAt,
 	}
 
-	id, err := repo.CreatePlant(ctx, plant)
+	savedPlant, err := repo.CreatePlant(ctx, plant)
 	if err != nil {
 		t.Fatalf("CreatePlant returned error: %v", err)
 	}
 
-	if id <= 0 {
-		t.Fatalf("expected positive id, got %d", id)
+	if savedPlant.ID <= 0 {
+		t.Fatalf("expected positive id, got %d", savedPlant.ID)
 	}
 
 	const query = `
@@ -83,7 +83,7 @@ func TestPlantRepositoryCreatePlant_Integration(t *testing.T) {
 	`
 
 	var saved domain.Plant
-	if err := db.QueryRowContext(ctx, query, id).Scan(
+	if err := db.QueryRowContext(ctx, query, savedPlant.ID).Scan(
 		&saved.ID,
 		&saved.UserID,
 		&saved.Name,
@@ -92,8 +92,8 @@ func TestPlantRepositoryCreatePlant_Integration(t *testing.T) {
 		t.Fatalf("query saved plant: %v", err)
 	}
 
-	if saved.ID != id {
-		t.Fatalf("expected saved id %d, got %d", id, saved.ID)
+	if saved.ID != savedPlant.ID {
+		t.Fatalf("expected saved id %d, got %d", savedPlant.ID, saved.ID)
 	}
 	if saved.UserID != plant.UserID {
 		t.Fatalf("expected user id %d, got %d", plant.UserID, saved.UserID)

@@ -40,7 +40,7 @@ func main() {
 	application := app.New(db)
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 
-	tgBot, err := telegram.New(token, logger, application.PlantService, application.UserService)
+	tgBot, err := telegram.New(token, logger, application.PlantService, application.UserService, application.CareEventService)
 	if err != nil {
 		log.Fatal(err)
 	}

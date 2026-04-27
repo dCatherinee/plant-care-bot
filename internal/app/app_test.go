@@ -28,4 +28,8 @@ func TestNewBuildsServices(t *testing.T) {
 	if app.UserService == nil {
 		t.Fatal("expected UserService to be initialized")
 	}
+
+	if app.CareEventService == nil {
+		t.Fatal("expected CareEventService to be initialized")
+	}
 }
