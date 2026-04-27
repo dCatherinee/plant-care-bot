@@ -31,11 +31,17 @@ func newPlantRepositoryTestDB(t *testing.T) (*PlantRepository, sqlmock.Sqlmock) 
 	return NewPlantRepository(db), mock
 }
 
-func TestPlantRepositoryCreatePlantReturnsID(t *testing.T) {
+func TestPlantRepositoryCreatePlantReturnsPlant(t *testing.T) {
 	repo, mock := newPlantRepositoryTestDB(t)
 	ctx := context.Background()
 	createdAt := time.Date(2026, time.March, 24, 12, 0, 0, 0, time.UTC)
-	plant := domain.Plant{
+	input := domain.Plant{
+		UserID:    10,
+		Name:      "Monstera",
+		CreatedAt: createdAt,
+	}
+	expected := domain.Plant{
+		ID:        42,
 		UserID:    10,
 		Name:      "Monstera",
 		CreatedAt: createdAt,
@@ -44,20 +50,21 @@ func TestPlantRepositoryCreatePlantReturnsID(t *testing.T) {
 	query := regexp.QuoteMeta(`
 		insert into plants (user_id, name, created_at)
 		values ($1, $2, $3)
-		returning id
+		returning id, user_id, name, created_at
 	`)
 
 	mock.ExpectQuery(query).
-		WithArgs(plant.UserID, plant.Name, plant.CreatedAt).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
+		WithArgs(input.UserID, input.Name, input.CreatedAt).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "name", "created_at"}).
+			AddRow(expected.ID, expected.UserID, expected.Name, expected.CreatedAt))
 
-	id, err := repo.CreatePlant(ctx, plant)
+	actual, err := repo.CreatePlant(ctx, input)
 	if err != nil {
 		t.Fatalf("CreatePlant returned error: %v", err)
 	}
 
-	if id != 42 {
-		t.Fatalf("expected id 42, got %d", id)
+	if actual != expected {
+		t.Fatalf("expected plant %+v, got %+v", expected, actual)
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

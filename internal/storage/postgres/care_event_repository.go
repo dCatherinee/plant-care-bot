@@ -16,22 +16,24 @@ func NewCareEventRepository(db *sql.DB) *CareEventRepository {
 	return &CareEventRepository{db: db}
 }
 
-func (r *CareEventRepository) CreateCareEvent(ctx context.Context, event domain.CareEvent) (int64, error) {
-	const query = `
+func (r *CareEventRepository) CreateCareEvent(ctx context.Context, event domain.CareEvent) (domain.CareEvent, error) {
+	var (
+		query = `
 		insert into care_events (plant_id, event_type, occurred_at)
 		values ($1, $2, $3)
-		returning id;
+		returning id, plant_id, event_type, occurred_at, created_at;
 	`
+		dest careEvent
+	)
 
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
 
-	var id int64
-	if err := r.db.QueryRowContext(ctx, query, event.PlantID, event.Kind, event.OccurredAt).Scan(&id); err != nil {
-		return 0, fmt.Errorf("create care event: %w", err)
+	if err := r.db.QueryRowContext(ctx, query, event.PlantID, event.Kind, event.OccurredAt).Scan(dest.scanCareEvent()...); err != nil {
+		return domain.CareEvent{}, fmt.Errorf("create care event: %w", err)
 	}
 
-	return id, nil
+	return newCareEvent(dest), nil
 }
 
 func (r *CareEventRepository) ListCareEventsByType(ctx context.Context, plantID int64, eventType domain.CareKind) ([]domain.CareEvent, error) {
@@ -51,21 +53,21 @@ func (r *CareEventRepository) ListCareEventsByType(ctx context.Context, plantID 
 	}
 	defer rows.Close()
 
-	var careEvents []domain.CareEvent
+	var res []careEvent
 	for rows.Next() {
-		var event domain.CareEvent
-		if err := rows.Scan(&event.ID, &event.PlantID, &event.Kind, &event.OccurredAt, &event.CreatedAt); err != nil {
+		var event careEvent
+		if err := rows.Scan(event.scanCareEvent()...); err != nil {
 			return nil, fmt.Errorf("scan plant: %w", err)
 		}
 
-		careEvents = append(careEvents, event)
+		res = append(res, event)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate plants: %w", err)
 	}
 
-	return careEvents, nil
+	return newCareEvents(res), nil
 }
 
 func (r *CareEventRepository) ListRecentCareEventsByUserAndType(ctx context.Context, userID int64, eventType domain.CareKind, limit int) ([]domain.CareEvent, error) {
@@ -87,19 +89,19 @@ func (r *CareEventRepository) ListRecentCareEventsByUserAndType(ctx context.Cont
 	}
 	defer rows.Close()
 
-	var careEvents []domain.CareEvent
+	var res []careEvent
 	for rows.Next() {
-		var event domain.CareEvent
-		if err := rows.Scan(&event.ID, &event.PlantID, &event.Kind, &event.OccurredAt, &event.CreatedAt); err != nil {
+		var event careEvent
+		if err := rows.Scan(event.scanCareEvent()...); err != nil {
 			return nil, fmt.Errorf("scan care event: %w", err)
 		}
 
-		careEvents = append(careEvents, event)
+		res = append(res, event)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate care events: %w", err)
 	}
 
-	return careEvents, nil
+	return newCareEvents(res), nil
 }

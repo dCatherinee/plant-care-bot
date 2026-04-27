@@ -9,18 +9,18 @@ import (
 )
 
 type fakePlantRepo struct {
-	createPlantFn      func(ctx context.Context, plant domain.Plant) (int64, error)
+	createPlantFn      func(ctx context.Context, plant domain.Plant) (domain.Plant, error)
 	listPlantsByUserFn func(ctx context.Context, userID int64) ([]domain.Plant, error)
 	deletePlantFn      func(ctx context.Context, userID int64, plantID int64) error
 	getPlantByIDFn     func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error)
 	updatePlantNameFn  func(ctx context.Context, userID int64, plantID int64, name string) (domain.Plant, error)
 }
 
-func (f *fakePlantRepo) CreatePlant(ctx context.Context, plant domain.Plant) (int64, error) {
+func (f *fakePlantRepo) CreatePlant(ctx context.Context, plant domain.Plant) (domain.Plant, error) {
 	if f.createPlantFn != nil {
 		return f.createPlantFn(ctx, plant)
 	}
-	return 0, nil
+	return domain.Plant{}, nil
 }
 
 func (f *fakePlantRepo) ListPlantsByUser(ctx context.Context, userID int64) ([]domain.Plant, error) {
@@ -73,14 +73,15 @@ func newService(r *fakePlantRepo) *PlantService {
 
 func TestPlantServiceAddPlant(t *testing.T) {
 	repo := &fakePlantRepo{
-		createPlantFn: func(ctx context.Context, plant domain.Plant) (int64, error) {
+		createPlantFn: func(ctx context.Context, plant domain.Plant) (domain.Plant, error) {
 			if plant.UserID != 10 {
 				t.Fatalf("expected userID 10, got %d", plant.UserID)
 			}
 			if plant.Name != "Cactus" {
 				t.Fatalf("expected trimmed name %q, got %q", "Cactus", plant.Name)
 			}
-			return 42, nil
+			plant.ID = 42
+			return plant, nil
 		},
 	}
 
@@ -99,9 +100,9 @@ func TestPlantServiceAddPlant(t *testing.T) {
 
 func TestPlantServiceAddPlantValidationError(t *testing.T) {
 	repo := &fakePlantRepo{
-		createPlantFn: func(ctx context.Context, plant domain.Plant) (int64, error) {
+		createPlantFn: func(ctx context.Context, plant domain.Plant) (domain.Plant, error) {
 			t.Fatal("repo should not be called on invalid input")
-			return 0, nil
+			return domain.Plant{}, nil
 		},
 	}
 
@@ -146,12 +147,14 @@ func TestPlantServiceListPlants(t *testing.T) {
 	}
 }
 
-func TestPlantServiceListPlantsReturnsCopy(t *testing.T) {
+func TestPlantServiceListPlantsReturnsRepoSlice(t *testing.T) {
+	sharedPlants := []domain.Plant{
+		{ID: 1, UserID: 10, Name: "Monstera"},
+	}
+
 	repo := &fakePlantRepo{
 		listPlantsByUserFn: func(ctx context.Context, userID int64) ([]domain.Plant, error) {
-			return []domain.Plant{
-				{ID: 1, UserID: 10, Name: "Monstera"},
-			}, nil
+			return sharedPlants, nil
 		},
 	}
 
@@ -165,8 +168,8 @@ func TestPlantServiceListPlantsReturnsCopy(t *testing.T) {
 	freshList, err := svc.ListPlants(context.Background(), 10)
 	mustNoErr(t, err)
 
-	if freshList[0].Name != "Monstera" {
-		t.Fatalf("expected original plant name %q, got %q", "Monstera", freshList[0].Name)
+	if freshList[0].Name != "Changed" {
+		t.Fatalf("expected updated plant name %q, got %q", "Changed", freshList[0].Name)
 	}
 }
 

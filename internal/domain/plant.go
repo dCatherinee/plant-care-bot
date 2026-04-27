@@ -9,7 +9,6 @@ type Plant struct {
 	ID        int64
 	UserID    int64
 	Name      string
-	Notes     string
 	CreatedAt time.Time
 }
 
@@ -27,6 +26,18 @@ func NewPlant(userID int64, name string) (Plant, error) {
 		Name:      normalizedName,
 		CreatedAt: time.Now().UTC(),
 	}, nil
+}
+
+func MustPlant(id, userID int64, name string, createdAt time.Time) Plant {
+	res, err := NewPlant(userID, name)
+	if err != nil {
+		panic(err)
+	}
+
+	res.ID = id
+	res.CreatedAt = createdAt
+
+	return res
 }
 
 func (p *Plant) Rename(name string) error {

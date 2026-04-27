@@ -10,17 +10,17 @@ import (
 )
 
 type fakeCareEventRepo struct {
-	createCareEventFn                 func(ctx context.Context, event domain.CareEvent) (int64, error)
+	createCareEventFn                 func(ctx context.Context, event domain.CareEvent) (domain.CareEvent, error)
 	listCareEventsByTypeFn            func(ctx context.Context, plantID int64, eventType domain.CareKind) ([]domain.CareEvent, error)
 	listRecentCareEventsByUserAndType func(ctx context.Context, userID int64, eventType domain.CareKind, limit int) ([]domain.CareEvent, error)
 }
 
-func (f *fakeCareEventRepo) CreateCareEvent(ctx context.Context, event domain.CareEvent) (int64, error) {
+func (f *fakeCareEventRepo) CreateCareEvent(ctx context.Context, event domain.CareEvent) (domain.CareEvent, error) {
 	if f.createCareEventFn != nil {
 		return f.createCareEventFn(ctx, event)
 	}
 
-	return 0, nil
+	return domain.CareEvent{}, nil
 }
 
 func (f *fakeCareEventRepo) ListCareEventsByType(ctx context.Context, plantID int64, eventType domain.CareKind) ([]domain.CareEvent, error) {
@@ -51,7 +51,7 @@ func TestCareEventServiceMarkWaterChecksPlantOwnership(t *testing.T) {
 	}
 
 	repo := &fakeCareEventRepo{
-		createCareEventFn: func(ctx context.Context, event domain.CareEvent) (int64, error) {
+		createCareEventFn: func(ctx context.Context, event domain.CareEvent) (domain.CareEvent, error) {
 			if event.PlantID != 15 {
 				t.Fatalf("expected plant ID 15, got %d", event.PlantID)
 			}
@@ -59,7 +59,8 @@ func TestCareEventServiceMarkWaterChecksPlantOwnership(t *testing.T) {
 				t.Fatalf("expected water kind, got %q", event.Kind)
 			}
 
-			return 101, nil
+			event.ID = 101
+			return event, nil
 		},
 	}
 
@@ -85,9 +86,9 @@ func TestCareEventServiceMarkWaterReturnsNotFoundWhenPlantMissing(t *testing.T) 
 	}
 
 	repo := &fakeCareEventRepo{
-		createCareEventFn: func(ctx context.Context, event domain.CareEvent) (int64, error) {
+		createCareEventFn: func(ctx context.Context, event domain.CareEvent) (domain.CareEvent, error) {
 			createCalled = true
-			return 0, nil
+			return domain.CareEvent{}, nil
 		},
 	}
 
@@ -138,7 +139,7 @@ func TestCareEventServiceListCareEventsByTypeChecksPlantOwnership(t *testing.T) 
 	}
 }
 
-func TestCareEventServiceListCareEventsByTypeReturnsCopy(t *testing.T) {
+func TestCareEventServiceListCareEventsByTypeReturnsRepoSlice(t *testing.T) {
 	plantRepo := &fakePlantRepo{
 		getPlantByIDFn: func(ctx context.Context, userID int64, plantID int64) (domain.Plant, error) {
 			return domain.Plant{ID: plantID, UserID: userID, Name: "Monstera"}, nil
@@ -146,11 +147,12 @@ func TestCareEventServiceListCareEventsByTypeReturnsCopy(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
+	sharedEvents := []domain.CareEvent{
+		{ID: 1, PlantID: 15, Kind: domain.CareKindWater, OccurredAt: now},
+	}
 	repo := &fakeCareEventRepo{
 		listCareEventsByTypeFn: func(ctx context.Context, plantID int64, eventType domain.CareKind) ([]domain.CareEvent, error) {
-			return []domain.CareEvent{
-				{ID: 1, PlantID: 15, Kind: domain.CareKindWater, OccurredAt: now},
-			}, nil
+			return sharedEvents, nil
 		},
 	}
 
@@ -164,8 +166,8 @@ func TestCareEventServiceListCareEventsByTypeReturnsCopy(t *testing.T) {
 	freshEvents, err := svc.ListCareEventsByType(context.Background(), 77, 15, domain.CareKindWater)
 	mustNoErr(t, err)
 
-	if freshEvents[0].Kind != domain.CareKindWater {
-		t.Fatalf("expected original kind %q, got %q", domain.CareKindWater, freshEvents[0].Kind)
+	if freshEvents[0].Kind != domain.CareKindFertilize {
+		t.Fatalf("expected updated kind %q, got %q", domain.CareKindFertilize, freshEvents[0].Kind)
 	}
 }
 
